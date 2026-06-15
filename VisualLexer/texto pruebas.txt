@@ -1,3 +1,9 @@
+https://sourceforge.net/projects/winflexbison/
+C:\winflexbison
+flex --version
+https://www.msys2.org/
+pacman -S mingw-w64-ucrt-x86_64-gcc
+
 flex lexer.l
 gcc lex.yy.c -o lexer.exe
 python app.py
