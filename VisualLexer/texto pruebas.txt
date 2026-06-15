@@ -1,0 +1,28 @@
+flex lexer.l
+gcc lex.yy.c -o lexer.exe
+python app.py
+
+
+
+int contador = 0;
+while (contador) {
+    contador = contador + 1;
+}
+
+int calcular() {
+    int a = 15;
+    int b = 5;
+    return a * b / 2;
+}
+
+int x = 10;
+if (x) {
+    x = x - 1;
+} else {
+    x = x + 100;
+}
+
+
+int total = 100;
+@precio = 50;
+total = total * #precio;
