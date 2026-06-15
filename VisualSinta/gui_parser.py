@@ -2,12 +2,11 @@ import tkinter as tk
 from tkinter import messagebox
 import re
 
-# --- Variables Globales ---
 tokens = []
 pos = 0
 token_actual = None
 
-# --- Analizador Lexico ---
+# Analizador Lexico
 def tokenizar(expresion):
     patron = re.compile(r'\s*(?:(\d+\.?\d*)|([+\-*/().]))\s*')
     return [match.group(1) or match.group(2) for match in patron.finditer(expresion)]
@@ -24,9 +23,9 @@ def match(esperado):
     if token_actual == esperado:
         advance()
     else:
-        raise ValueError(f"Se esperaba '{esperado}', se encontró '{token_actual}'")
+        raise ValueError(f"Falta '{esperado}', se encontro '{token_actual}'")
 
-# --- Reglas de Produccion y Evaluacion ---
+# Analizador Sintactico y Semantico
 def E():
     val = T()
     return E_prima(val)
@@ -55,7 +54,7 @@ def T_prima(heredado):
         match('/')
         val = F()
         if val == 0:
-            raise ValueError("Error Semántico: División por cero")
+            raise ValueError("Division por cero")
         return T_prima(heredado / val)
     return heredado
 
@@ -71,15 +70,15 @@ def F():
             advance()
             return val
         except (ValueError, TypeError):
-            raise ValueError(f"Sintaxis inválida cerca de: '{token_actual}'")
+            raise ValueError(f"Sintaxis invalida en: '{token_actual}'")
 
-# --- Interfaz Grafica ---
+# Interfaz Grafica
 def iniciar_analisis():
     global tokens, pos
     expr = entrada_texto.get()
     
     if not expr:
-        messagebox.showwarning("Advertencia", "Ingrese una expresión.")
+        messagebox.showwarning("Advertencia", "Ingrese una expresion.")
         return
 
     try:
@@ -89,20 +88,20 @@ def iniciar_analisis():
         
         resultado = E()
         
-        if token_actual == '.':
-            messagebox.showinfo("Éxito", f"Análisis correcto.\nResultado: {resultado}")
+        if token_actual in ('.', '\0'):
+            messagebox.showinfo("Exito", f"Analisis correcto.\nResultado: {resultado}")
         else:
-            raise ValueError(f"Falta fin de cadena (.), se encontró: '{token_actual}'")
+            raise ValueError(f"Simbolo no reconocido al final: '{token_actual}'")
             
     except Exception as error:
         messagebox.showerror("Error", str(error))
 
 ventana = tk.Tk()
-ventana.title("Analizador y Evaluador Sintáctico")
+ventana.title("Analizador y Evaluador Sintactico")
 ventana.geometry("350x150")
 ventana.resizable(False, False)
 
-tk.Label(ventana, text="Expresión (ej. 10.5 * (2 + 3) .):").pack(pady=10)
+tk.Label(ventana, text="Expresion:").pack(pady=10)
 
 entrada_texto = tk.Entry(ventana, width=40)
 entrada_texto.pack(pady=5)

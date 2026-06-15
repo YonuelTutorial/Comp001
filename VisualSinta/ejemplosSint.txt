@@ -1,0 +1,34 @@
+Operaciones Válidas
+
+10 + 5.
+Resultado: 15.0
+
+2 + 3 * 4.
+Resultado: 14.0
+
+(2 + 3) * 4.
+Resultado: 20.0
+
+10.5 - 2.5 * 2.
+Resultado: 5.5
+
+100 / 4 + 2 * 3.
+Resultado: 31.0
+
+((10 + 5) * 2) / 3.
+Resultado: 10.0
+
+
+(Rechazos)
+
+100 / (5 - 5).
+Resultado: Error (División por cero)
+
+10 + * 5.
+Resultado: Error (Sintaxis inválida en: '*')
+
+(5 + 5.
+Resultado: Error (Falta ')')
+
+10 + 5
+Resultado: Error (Falta fin de cadena)
