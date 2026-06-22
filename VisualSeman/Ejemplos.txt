@@ -1,0 +1,29 @@
+Prueba 1: Ejecución limpia sin errores
+    int edad
+    edad = 25
+    string nombre
+    nombre = "Pedro"
+    int nueva_edad
+    nueva_edad = edad
+
+
+
+Prueba 2: Uso de variables no declaradas
+    int precio
+    precio = 500
+    impuesto = 18
+    total = precio
+
+Prueba 3: Incompatibilidad de tipos de datos
+    int contador
+    contador = "inicio"
+    string mensaje
+    mensaje = 100
+
+Prueba 4: Declaración duplicada Verifica la restricción de crear una variable con un nombre ya registrado en memoria.
+
+    int limite
+    limite = 100
+    string limite
+
+
