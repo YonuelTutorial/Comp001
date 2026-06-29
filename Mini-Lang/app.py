@@ -1,146 +1,247 @@
 import tkinter as tk
 import re
 
-# Analizador Semántico y Traductor
-class CompiladorMini:
-    def __init__(self):
-        self.tabla_simbolos = {}
-        self.errores = []
-        self.codigo_js = []
+# ==========================================
+# FASE 1: ANALIZADOR LÉXICO
+# ==========================================
+TOKEN_REGEX = [
+    ('PRINT', r'print'),
+    ('INT_T', r'int'),
+    ('STR_T', r'string'),
+    ('ID', r'[a-zA-Z_]\w*'),
+    ('NUM', r'\d+'),
+    ('STR_VAL', r'".*?"'),
+    ('ASSIGN', r'='),
+    ('LPAREN', r'\('),
+    ('RPAREN', r'\)'),
+    ('SEMI', r';'),
+    ('SKIP', r'[ \t\n]+'),
+    ('MISMATCH', r'.')
+]
 
-    def compilar(self, codigo):
-        self.tabla_simbolos.clear()
-        self.errores.clear()
-        self.codigo_js.clear()
+class Lexer:
+    def tokenize(self, code):
+        tokens = []
+        line_num = 1
+        for mo in re.finditer('|'.join(f'(?P<{pair[0]}>{pair[1]})' for pair in TOKEN_REGEX), code):
+            kind = mo.lastgroup
+            value = mo.group()
+            if kind == 'SKIP':
+                line_num += value.count('\n')
+                continue
+            elif kind == 'MISMATCH':
+                raise Exception(f"Línea {line_num}: Error Léxico. Carácter no reconocido '{value}'")
+            tokens.append((kind, value, line_num))
+        return tokens
+
+# ==========================================
+# NODOS DEL ÁRBOL SINTÁCTICO (AST)
+# ==========================================
+class VarDecl:
+    def __init__(self, tipo, nombre, valor, linea):
+        self.tipo = tipo
+        self.nombre = nombre
+        self.valor = valor
+        self.linea = linea
+
+class Assign:
+    def __init__(self, nombre, valor, linea):
+        self.nombre = nombre
+        self.valor = valor
+        self.linea = linea
+
+class Print:
+    def __init__(self, expr, linea):
+        self.expr = expr
+        self.linea = linea
+
+# ==========================================
+# FASE 2: ANALIZADOR SINTÁCTICO
+# ==========================================
+class Parser:
+    def __init__(self, tokens):
+        self.tokens = tokens
+        self.pos = 0
+
+    def parse(self):
+        ast = []
+        while self.pos < len(self.tokens):
+            ast.append(self.statement())
+        return ast
+
+    def match(self, expected_kind):
+        if self.pos < len(self.tokens) and self.tokens[self.pos][0] == expected_kind:
+            token = self.tokens[self.pos]
+            self.pos += 1
+            return token
+        linea = self.tokens[self.pos][2] if self.pos < len(self.tokens) else 'EOF'
+        raise Exception(f"Línea {linea}: Error Sintáctico. Se esperaba {expected_kind}.")
+
+    def statement(self):
+        kind = self.tokens[self.pos][0]
+        if kind in ('INT_T', 'STR_T'):
+            return self.var_decl()
+        elif kind == 'ID':
+            return self.assign()
+        elif kind == 'PRINT':
+            return self.print_stmt()
+        else:
+            raise Exception(f"Línea {self.tokens[self.pos][2]}: Instrucción no válida.")
+
+    def var_decl(self):
+        tipo = self.match(self.tokens[self.pos][0])[1]
+        nombre = self.match('ID')[1]
+        linea = self.tokens[self.pos-1][2]
+        valor = None
         
-        lineas = codigo.split('\n')
-        
-        for num, linea in enumerate(lineas, 1):
-            linea = linea.strip()
-            if not linea: continue
+        if self.pos < len(self.tokens) and self.tokens[self.pos][0] == 'ASSIGN':
+            self.match('ASSIGN')
+            val_token = self.tokens[self.pos]
+            if val_token[0] not in ('NUM', 'STR_VAL', 'ID'):
+                raise Exception(f"Línea {val_token[2]}: Valor no válido en declaración.")
+            valor = (val_token[0], val_token[1])
+            self.pos += 1
             
-            if linea.startswith('print(') and linea.endswith(');'):
-                self.procesar_print(linea, num)
-            elif linea.startswith(('int ', 'string ')):
-                self.procesar_declaracion(linea, num)
-            elif '=' in linea:
-                self.procesar_asignacion(linea, num)
-            else:
-                self.errores.append(f"Línea {num}: Sintaxis no reconocida -> {linea}")
+        self.match('SEMI')
+        return VarDecl(tipo, nombre, valor, linea)
 
-        if self.errores:
-            return False, self.errores
-        return True, '\n'.join(self.codigo_js)
+    def assign(self):
+        nombre = self.match('ID')[1]
+        linea = self.tokens[self.pos-1][2]
+        self.match('ASSIGN')
+        val_token = self.tokens[self.pos]
+        
+        if val_token[0] not in ('NUM', 'STR_VAL', 'ID'):
+            raise Exception(f"Línea {val_token[2]}: Valor no válido en asignación.")
+            
+        valor = (val_token[0], val_token[1])
+        self.pos += 1
+        self.match('SEMI')
+        return Assign(nombre, valor, linea)
 
-    def procesar_print(self, linea, num):
-        var = linea[6:-2].strip()
-        if var.startswith('"') and var.endswith('"'):
-            self.codigo_js.append(f"console.log({var});")
-        elif var in self.tabla_simbolos:
-            self.codigo_js.append(f"console.log({var});")
-        else:
-            self.errores.append(f"Línea {num}: Variable '{var}' no declarada.")
+    def print_stmt(self):
+        self.match('PRINT')
+        linea = self.tokens[self.pos-1][2]
+        self.match('LPAREN')
+        val_token = self.tokens[self.pos]
+        
+        if val_token[0] not in ('STR_VAL', 'ID'):
+            raise Exception(f"Línea {val_token[2]}: Parámetro inválido en print().")
+            
+        expr = (val_token[0], val_token[1])
+        self.pos += 1
+        self.match('RPAREN')
+        self.match('SEMI')
+        return Print(expr, linea)
 
-    def procesar_declaracion(self, linea, num):
-        match = re.match(r'^(int|string)\s+([a-zA-Z_]\w*)\s*(?:=\s*(.+))?;$', linea)
-        if not match:
-            self.errores.append(f"Línea {num}: Error de sintaxis en declaración.")
-            return
+# ==========================================
+# FASE 3: ANALIZADOR SEMÁNTICO
+# ==========================================
+class SemanticAnalyzer:
+    def __init__(self):
+        self.symtab = {}
 
-        tipo, var, valor = match.groups()
+    def analyze(self, ast):
+        self.symtab.clear()
+        for node in ast:
+            if isinstance(node, VarDecl):
+                if node.nombre in self.symtab:
+                    raise Exception(f"Línea {node.linea}: Error Semántico. Variable '{node.nombre}' ya declarada.")
+                self.symtab[node.nombre] = node.tipo
+                if node.valor:
+                    self.check_type(node.nombre, node.valor, node.linea)
+                    
+            elif isinstance(node, Assign):
+                if node.nombre not in self.symtab:
+                    raise Exception(f"Línea {node.linea}: Error Semántico. Variable '{node.nombre}' no declarada.")
+                self.check_type(node.nombre, node.valor, node.linea)
+                
+            elif isinstance(node, Print):
+                if node.expr[0] == 'ID' and node.expr[1] not in self.symtab:
+                    raise Exception(f"Línea {node.linea}: Error Semántico. Variable '{node.expr[1]}' no declarada.")
 
-        if var in self.tabla_simbolos:
-            self.errores.append(f"Línea {num}: Variable '{var}' ya declarada.")
-            return
+    def check_type(self, var_name, valor, linea):
+        esperado = self.symtab[var_name]
+        tipo_val = valor[0]
+        
+        if tipo_val == 'ID':
+            if valor[1] not in self.symtab:
+                raise Exception(f"Línea {linea}: Error Semántico. Variable '{valor[1]}' no declarada.")
+            tipo_val = self.symtab[valor[1]]
+            tipo_val = 'NUM' if tipo_val == 'int' else 'STR_VAL'
+            
+        if esperado == 'int' and tipo_val != 'NUM':
+            raise Exception(f"Línea {linea}: Error Semántico. Tipos incompatibles (esperaba int).")
+        if esperado == 'string' and tipo_val != 'STR_VAL':
+            raise Exception(f"Línea {linea}: Error Semántico. Tipos incompatibles (esperaba string).")
 
-        self.tabla_simbolos[var] = tipo
+# ==========================================
+# FASE 4: GENERADOR DE CÓDIGO DESTINO
+# ==========================================
+class JSGenerator:
+    def generate(self, ast):
+        js_code = []
+        for node in ast:
+            if isinstance(node, VarDecl):
+                if node.valor:
+                    js_code.append(f"let {node.nombre} = {node.valor[1]};")
+                else:
+                    js_code.append(f"let {node.nombre};")
+            elif isinstance(node, Assign):
+                js_code.append(f"{node.nombre} = {node.valor[1]};")
+            elif isinstance(node, Print):
+                js_code.append(f"console.log({node.expr[1]});")
+        return '\n'.join(js_code)
 
-        if valor:
-            tipo_valor = self.obtener_tipo_valor(valor)
-            if tipo_valor != 'desconocido' and tipo != tipo_valor:
-                self.errores.append(f"Línea {num}: Tipo incompatible. Se esperaba {tipo}.")
-            else:
-                self.codigo_js.append(f"let {var} = {valor};")
-        else:
-            self.codigo_js.append(f"let {var};")
-
-    def procesar_asignacion(self, linea, num):
-        match = re.match(r'^([a-zA-Z_]\w*)\s*=\s*(.+);$', linea)
-        if not match:
-            self.errores.append(f"Línea {num}: Error de sintaxis en asignación.")
-            return
-
-        var, valor = match.groups()
-
-        if var not in self.tabla_simbolos:
-            self.errores.append(f"Línea {num}: Variable '{var}' no declarada.")
-            return
-
-        tipo_var = self.tabla_simbolos[var]
-        tipo_valor = self.obtener_tipo_valor(valor)
-
-        if tipo_valor == 'variable':
-            if valor not in self.tabla_simbolos:
-                self.errores.append(f"Línea {num}: Variable '{valor}' no declarada.")
-                return
-            tipo_valor = self.tabla_simbolos[valor]
-
-        if tipo_var != tipo_valor and tipo_valor != 'desconocido':
-            self.errores.append(f"Línea {num}: Incompatibilidad. No se puede asignar '{tipo_valor}' a '{var}' (tipo {tipo_var}).")
-        else:
-            self.codigo_js.append(f"{var} = {valor};")
-
-    def obtener_tipo_valor(self, valor):
-        if re.match(r'^\d+$', valor):
-            return 'int'
-        elif re.match(r'^".*"$', valor):
-            return 'string'
-        elif re.match(r'^[a-zA-Z_]\w*$', valor):
-            return 'variable'
-        return 'desconocido'
-
-# Interfaz Gráfica
-class VentanaCompilador:
+# ==========================================
+# INTERFAZ GRÁFICA (UI)
+# ==========================================
+class MainApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Compilador: Análisis Semántico + Traductor a JS")
+        self.root.title("Compilador Formal: Lex -> Parser -> Semántico -> JS")
         self.root.geometry("650x550")
-        self.compilador = CompiladorMini()
-        self.crear_widgets()
-
-    def crear_widgets(self):
-        tk.Label(self.root, text="Código Fuente (Mini-Lang):", font=("Arial", 10, "bold")).pack(pady=5)
         
+        self.lexer = Lexer()
+        self.semantic = SemanticAnalyzer()
+        self.generator = JSGenerator()
+        
+        self.setup_ui()
+
+    def setup_ui(self):
+        tk.Label(self.root, text="Código Fuente:", font=("Arial", 10, "bold")).pack(pady=5)
         self.txt_codigo = tk.Text(self.root, height=10, width=75, font=("Courier", 10))
         self.txt_codigo.pack()
         
-        codigo_prueba = "int x = 10;\nstring msj = \"Hola Mundo\";\nprint(msj);\nx = 50;\nprint(x);"
+        codigo_prueba = "int x = 10;\nstring msj = \"Prueba\";\nprint(msj);\nx = 50;\nprint(x);"
         self.txt_codigo.insert(tk.END, codigo_prueba)
 
-        tk.Button(self.root, text="Analizar y Traducir", command=self.ejecutar, bg="lightgray").pack(pady=10)
+        tk.Button(self.root, text="Compilar", command=self.compilar_codigo, bg="lightgray").pack(pady=10)
 
-        tk.Label(self.root, text="Consola de Salida (Errores / Código JS):", font=("Arial", 10, "bold")).pack(pady=5)
-        
+        tk.Label(self.root, text="Consola de Salida:", font=("Arial", 10, "bold")).pack(pady=5)
         self.txt_consola = tk.Text(self.root, height=12, width=75, font=("Courier", 10))
         self.txt_consola.pack()
 
-    def ejecutar(self):
-        codigo = self.txt_codigo.get("1.0", tk.END)
-        exito, resultado = self.compilador.compilar(codigo)
-
+    def compilar_codigo(self):
+        codigo = self.txt_codigo.get("1.0", tk.END).strip()
         self.txt_consola.delete("1.0", tk.END)
         
-        if exito:
+        try:
+            tokens = self.lexer.tokenize(codigo)
+            parser = Parser(tokens)
+            ast = parser.parse()
+            self.semantic.analyze(ast)
+            js_output = self.generator.generate(ast)
+            
             self.txt_consola.config(fg="blue")
-            self.txt_consola.insert(tk.END, "// --- TRADUCCIÓN A JAVASCRIPT EXITOSA ---\n\n")
-            self.txt_consola.insert(tk.END, resultado)
-        else:
+            self.txt_consola.insert(tk.END, "// --- COMPILACIÓN EXITOSA ---\n")
+            self.txt_consola.insert(tk.END, js_output)
+            
+        except Exception as e:
             self.txt_consola.config(fg="red")
-            self.txt_consola.insert(tk.END, "// --- ERRORES SEMÁNTICOS / SINTÁCTICOS ---\n\n")
-            for error in resultado:
-                self.txt_consola.insert(tk.END, error + "\n")
+            self.txt_consola.insert(tk.END, str(e))
 
 if __name__ == "__main__":
     root = tk.Tk()
-    app = VentanaCompilador(root)
+    app = MainApp(root)
     root.mainloop()
