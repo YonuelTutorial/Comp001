@@ -1,0 +1,47 @@
+Prueba 1: Propagación en cascada
+Verifica si el optimizador puede rastrear el valor a través de múltiples asignaciones seguidas antes de imprimir.
+
+Código Fuente:
+Plaintext
+int x = 50;
+int y = x;
+int z = y;
+print(z);
+Salida JS Esperada:
+
+JavaScript
+let x = 50;
+let y = 50;
+let z = 50;
+console.log(50);
+
+
+
+Prueba 2: Reasignación y actualización del optimizador
+
+string estado = "Activo";
+print(estado);
+estado = "Inactivo";
+int nivel = 5;
+print(estado);
+
+
+let estado = "Activo";
+console.log("Activo");
+estado = "Inactivo";
+let nivel = 5;
+console.log("Inactivo");
+
+
+Prueba 3: Bloqueo en fase semántica
+
+int puntos = 100;
+int bonus = 20;
+puntos = "cien";
+print(puntos);
+
+
+// --- ERRORES SEMÁNTICOS / SINTÁCTICOS ---
+
+Línea 3: Tipos incompatibles (int).
+
