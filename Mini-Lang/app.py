@@ -1,260 +1,490 @@
+
+
 import tkinter as tk
 import re
 
-# ==========================================
-# FASE 1: LÉXICO
-# ==========================================
 TOKEN_REGEX = [
-    ('PRINT', r'print'),
-    ('INT_T', r'int'),
-    ('STR_T', r'string'),
-    ('ID', r'[a-zA-Z_]\w*'),
-    ('NUM', r'\d+'),
-    ('STR_VAL', r'".*?"'),
+    ('IF', r'if\b'),
+    ('ELSE', r'else\b'),
+    ('WHILE', r'while\b'),
+
+    ('PRINT', r'print\b'),
+
+    ('INT_T', r'int\b'),
+    ('STR_T', r'string\b'),
+    ('BOOL_T', r'bool\b'),
+
+    ('TRUE', r'true\b'),
+    ('FALSE', r'false\b'),
+
+    ('EQ', r'=='),
+    ('NE', r'!='),
+    ('GE', r'>='),
+    ('LE', r'<='),
+    ('GT', r'>'),
+    ('LT', r'<'),
+
+    ('PLUS', r'\+'),
+    ('MINUS', r'-'),
+    ('MUL', r'\*'),
+    ('DIV', r'/'),
+    ('MOD', r'%'),
+
     ('ASSIGN', r'='),
+
     ('LPAREN', r'\('),
     ('RPAREN', r'\)'),
+
+    ('LBRACE', r'\{'),
+    ('RBRACE', r'\}'),
+
     ('SEMI', r';'),
+
+    ('NUM', r'\d+'),
+    ('STR_VAL', r'"[^"]*"'),
+
+    ('ID', r'[a-zA-Z_]\w*'),
+
     ('SKIP', r'[ \t\n]+'),
     ('MISMATCH', r'.')
 ]
 
+
 class Lexer:
+
     def tokenize(self, code):
         tokens = []
         line_num = 1
-        for mo in re.finditer('|'.join(f'(?P<{pair[0]}>{pair[1]})' for pair in TOKEN_REGEX), code):
+        regex = '|'.join(
+            f'(?P<{name}>{pattern})'
+            for name, pattern in TOKEN_REGEX
+        )
+
+        for mo in re.finditer(regex, code):
             kind = mo.lastgroup
             value = mo.group()
             if kind == 'SKIP':
                 line_num += value.count('\n')
                 continue
-            elif kind == 'MISMATCH':
-                raise Exception(f"Línea {line_num}: Error Léxico '{value}'")
-            tokens.append((kind, value, line_num))
+            if kind == 'MISMATCH':
+                raise Exception(
+                    f"Línea {line_num}: Error Léxico '{value}'"
+                )
+            tokens.append(
+                (kind, value, line_num)
+            )
         return tokens
+    
+class Literal:
 
-# ==========================================
-# AST NODOS
-# ==========================================
-class VarDecl:
-    def __init__(self, tipo, nombre, valor, linea):
+    def __init__(self, value, tipo):
+        self.value = value
         self.tipo = tipo
-        self.nombre = nombre
-        self.valor = valor
-        self.linea = linea
 
-class Assign:
-    def __init__(self, nombre, valor, linea):
+
+class Variable:
+
+    def __init__(self, nombre):
         self.nombre = nombre
-        self.valor = valor
-        self.linea = linea
+
+
+class BinaryOp:
+
+    def __init__(self, left, op, right):
+        self.left = left
+        self.op = op
+        self.right = right
+
+
+class If:
+
+    def __init__(self, condicion, cuerpo, sino):
+
+        self.condicion = condicion
+        self.cuerpo = cuerpo
+        self.sino = sino
+
+
+class While:
+
+    def __init__(self, condicion, cuerpo):
+
+        self.condicion = condicion
+        self.cuerpo = cuerpo
+
 
 class Print:
-    def __init__(self, expr, linea):
-        self.expr = expr
-        self.linea = linea
 
-# ==========================================
-# FASE 2: SINTÁCTICO
-# ==========================================
+    def __init__(self, expresion):
+
+        self.expresion = expresion
+
 class Parser:
+
     def __init__(self, tokens):
         self.tokens = tokens
         self.pos = 0
 
-    def parse(self):
-        ast = []
-        while self.pos < len(self.tokens):
-            ast.append(self.statement())
-        return ast
+    def current(self):
 
-    def match(self, expected_kind):
-        if self.pos < len(self.tokens) and self.tokens[self.pos][0] == expected_kind:
-            token = self.tokens[self.pos]
+        if self.pos < len(self.tokens):
+            return self.tokens[self.pos]
+
+        return None
+
+    def match(self, expected):
+
+        token = self.current()
+
+        if token and token[0] == expected:
             self.pos += 1
             return token
-        linea = self.tokens[self.pos][2] if self.pos < len(self.tokens) else 'EOF'
-        raise Exception(f"Línea {linea}: Error Sintáctico. Se esperaba {expected_kind}.")
 
-    def statement(self):
-        kind = self.tokens[self.pos][0]
-        if kind in ('INT_T', 'STR_T'):
-            return self.var_decl()
-        elif kind == 'ID':
-            return self.assign()
-        elif kind == 'PRINT':
-            return self.print_stmt()
-        else:
-            raise Exception(f"Línea {self.tokens[self.pos][2]}: Instrucción no válida.")
+        raise Exception(
+            f"Se esperaba {expected}"
+        )
 
-    def var_decl(self):
-        tipo = self.match(self.tokens[self.pos][0])[1]
-        nombre = self.match('ID')[1]
-        linea = self.tokens[self.pos-1][2]
-        valor = None
-        if self.pos < len(self.tokens) and self.tokens[self.pos][0] == 'ASSIGN':
-            self.match('ASSIGN')
-            val_token = self.tokens[self.pos]
-            valor = (val_token[0], val_token[1])
-            self.pos += 1
-        self.match('SEMI')
-        return VarDecl(tipo, nombre, valor, linea)
+    def parse(self):
 
-    def assign(self):
-        nombre = self.match('ID')[1]
-        linea = self.tokens[self.pos-1][2]
-        self.match('ASSIGN')
-        val_token = self.tokens[self.pos]
-        valor = (val_token[0], val_token[1])
-        self.pos += 1
-        self.match('SEMI')
-        return Assign(nombre, valor, linea)
+        ast = []
 
-    def print_stmt(self):
-        self.match('PRINT')
-        linea = self.tokens[self.pos-1][2]
-        self.match('LPAREN')
-        val_token = self.tokens[self.pos]
-        expr = (val_token[0], val_token[1])
-        self.pos += 1
-        self.match('RPAREN')
-        self.match('SEMI')
-        return Print(expr, linea)
+        while self.current():
+            ast.append(
+                self.statement()
+            )
 
-# ==========================================
-# FASE 3: SEMÁNTICO
-# ==========================================
-class SemanticAnalyzer:
-    def __init__(self):
-        self.symtab = {}
-
-    def analyze(self, ast):
-        self.symtab.clear()
-        for node in ast:
-            if isinstance(node, VarDecl):
-                if node.nombre in self.symtab:
-                    raise Exception(f"Línea {node.linea}: Variable '{node.nombre}' ya declarada.")
-                self.symtab[node.nombre] = node.tipo
-                if node.valor:
-                    self.check_type(node.nombre, node.valor, node.linea)
-            elif isinstance(node, Assign):
-                if node.nombre not in self.symtab:
-                    raise Exception(f"Línea {node.linea}: Variable '{node.nombre}' no declarada.")
-                self.check_type(node.nombre, node.valor, node.linea)
-            elif isinstance(node, Print):
-                if node.expr[0] == 'ID' and node.expr[1] not in self.symtab:
-                    raise Exception(f"Línea {node.linea}: Variable '{node.expr[1]}' no declarada.")
-
-    def check_type(self, var_name, valor, linea):
-        esperado = self.symtab[var_name]
-        tipo_val = valor[0]
-        if tipo_val == 'ID':
-            tipo_val = self.symtab[valor[1]]
-            tipo_val = 'NUM' if tipo_val == 'int' else 'STR_VAL'
-        if esperado == 'int' and tipo_val != 'NUM':
-            raise Exception(f"Línea {linea}: Tipos incompatibles (int).")
-        if esperado == 'string' and tipo_val != 'STR_VAL':
-            raise Exception(f"Línea {linea}: Tipos incompatibles (string).")
-
-# ==========================================
-# FASE 4: OPTIMIZADOR (Propagación de Constantes)
-# ==========================================
-class Optimizer:
-    def optimize(self, ast):
-        constantes = {}
-        for node in ast:
-            if isinstance(node, VarDecl) and node.valor:
-                if node.valor[0] in ('NUM', 'STR_VAL'):
-                    constantes[node.nombre] = node.valor
-                elif node.valor[0] == 'ID' and node.valor[1] in constantes:
-                    node.valor = constantes[node.valor[1]]
-                    constantes[node.nombre] = node.valor
-
-            elif isinstance(node, Assign):
-                if node.valor[0] in ('NUM', 'STR_VAL'):
-                    constantes[node.nombre] = node.valor
-                elif node.valor[0] == 'ID' and node.valor[1] in constantes:
-                    node.valor = constantes[node.valor[1]]
-                    constantes[node.nombre] = node.valor
-                else:
-                    if node.nombre in constantes:
-                        del constantes[node.nombre]
-
-            elif isinstance(node, Print):
-                if node.expr[0] == 'ID' and node.expr[1] in constantes:
-                    node.expr = constantes[node.expr[1]]
         return ast
 
-# ==========================================
-# FASE 5: GENERADOR JS
-# ==========================================
-class JSGenerator:
-    def generate(self, ast):
-        js_code = []
-        for node in ast:
-            if isinstance(node, VarDecl):
-                if node.valor:
-                    js_code.append(f"let {node.nombre} = {node.valor[1]};")
-                else:
-                    js_code.append(f"let {node.nombre};")
-            elif isinstance(node, Assign):
-                js_code.append(f"{node.nombre} = {node.valor[1]};")
-            elif isinstance(node, Print):
-                js_code.append(f"console.log({node.expr[1]});")
-        return '\n'.join(js_code)
+    def statement(self):
 
-# ==========================================
-# INTERFAZ GRÁFICA
-# ==========================================
+        token = self.current()
+
+        if token[0] in (
+            'INT_T',
+            'STR_T',
+            'BOOL_T'
+        ):
+            return self.var_decl()
+
+        if token[0] == 'ID':
+            return self.assignment()
+
+        if token[0] == 'PRINT':
+            return self.print_stmt()
+
+        if token[0] == 'IF':
+            return self.if_stmt()
+
+        if token[0] == 'WHILE':
+            return self.while_stmt()
+
+        raise Exception(
+            f"Instrucción inválida: {token}"
+        )
+
+    def var_decl(self):
+
+        tipo = self.current()[1]
+        self.pos += 1
+
+        nombre = self.match('ID')[1]
+
+        expr = None
+
+        if self.current() and self.current()[0] == 'ASSIGN':
+
+            self.match('ASSIGN')
+
+            expr = self.expression()
+
+        self.match('SEMI')
+
+        return (
+            'VAR_DECL',
+            tipo,
+            nombre,
+            expr
+        )
+
+    def assignment(self):
+
+        nombre = self.match('ID')[1]
+
+        self.match('ASSIGN')
+
+        expr = self.expression()
+
+        self.match('SEMI')
+
+        return (
+            'ASSIGN',
+            nombre,
+            expr
+        )
+
+    def print_stmt(self):
+
+        self.match('PRINT')
+
+        self.match('LPAREN')
+
+        expr = self.expression()
+
+        self.match('RPAREN')
+
+        self.match('SEMI')
+
+        return Print(expr)
+
+    def if_stmt(self):
+
+        self.match('IF')
+
+        self.match('LPAREN')
+
+        condicion = self.expression()
+
+        self.match('RPAREN')
+
+        cuerpo = self.block()
+
+        sino = []
+
+        if self.current() and self.current()[0] == 'ELSE':
+
+            self.match('ELSE')
+
+            sino = self.block()
+
+        return If(
+            condicion,
+            cuerpo,
+            sino
+        )
+
+    def while_stmt(self):
+
+        self.match('WHILE')
+
+        self.match('LPAREN')
+
+        condicion = self.expression()
+
+        self.match('RPAREN')
+
+        cuerpo = self.block()
+
+        return While(
+            condicion,
+            cuerpo
+        )
+
+    def block(self):
+
+        self.match('LBRACE')
+
+        instrucciones = []
+
+        while (
+            self.current()
+            and
+            self.current()[0] != 'RBRACE'
+        ):
+
+            instrucciones.append(
+                self.statement()
+            )
+
+        self.match('RBRACE')
+
+        return instrucciones
+
+    def expression(self):
+        return self.relational()
+
+    def relational(self):
+
+        node = self.additive()
+
+        while (
+            self.current()
+            and
+            self.current()[0]
+            in (
+                'EQ',
+                'NE',
+                'GT',
+                'LT',
+                'GE',
+                'LE'
+            )
+        ):
+
+            op = self.current()[1]
+
+            self.pos += 1
+
+            right = self.additive()
+
+            node = BinaryOp(
+                node,
+                op,
+                right
+            )
+
+        return node
+
+    def additive(self):
+
+        node = self.term()
+
+        while (
+            self.current()
+            and
+            self.current()[0]
+            in (
+                'PLUS',
+                'MINUS'
+            )
+        ):
+
+            op = self.current()[1]
+
+            self.pos += 1
+
+            right = self.term()
+
+            node = BinaryOp(
+                node,
+                op,
+                right
+            )
+
+        return node
+
+    def term(self):
+
+        node = self.factor()
+
+        while (
+            self.current()
+            and
+            self.current()[0]
+            in (
+                'MUL',
+                'DIV',
+                'MOD'
+            )
+        ):
+
+            op = self.current()[1]
+
+            self.pos += 1
+
+            right = self.factor()
+
+            node = BinaryOp(
+                node,
+                op,
+                right
+            )
+
+        return node
+
+    def factor(self):
+
+        token = self.current()
+
+        if token[0] == 'NUM':
+
+            self.pos += 1
+
+            return Literal(
+                int(token[1]),
+                'int'
+            )
+
+        if token[0] == 'STR_VAL':
+
+            self.pos += 1
+
+            return Literal(
+                token[1],
+                'string'
+            )
+
+        if token[0] == 'TRUE':
+
+            self.pos += 1
+
+            return Literal(
+                True,
+                'bool'
+            )
+
+        if token[0] == 'FALSE':
+
+            self.pos += 1
+
+            return Literal(
+                False,
+                'bool'
+            )
+
+        if token[0] == 'ID':
+
+            self.pos += 1
+
+            return Variable(
+                token[1]
+            )
+
+        if token[0] == 'LPAREN':
+
+            self.match('LPAREN')
+
+            expr = self.expression()
+
+            self.match('RPAREN')
+
+            return expr
+
+        raise Exception(
+            f"Factor inválido: {token}"
+        )
+
 class MainApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Compilador: Léxico -> Sintáctico -> Semántico -> Optimizador -> JS")
-        self.root.geometry("650x550")
-        
+        self.root.title("Compilador Mejorado")
         self.lexer = Lexer()
-        self.semantic = SemanticAnalyzer()
-        self.optimizer = Optimizer()
-        self.generator = JSGenerator()
+
+        self.txt = tk.Text(root, height=15, width=90)
+        self.txt.pack()
+
+        self.out = tk.Text(root, height=15, width=90)
+        self.out.pack()
+
+        tk.Button(root, text="Analizar", command=self.run).pack()
+
+        self.txt.insert("1.0", """int a = 5 + 3;
+bool activo = true;
+print(a);
+""")
         
-        self.setup_ui()
-
-    def setup_ui(self):
-        tk.Label(self.root, text="Código Fuente:", font=("Arial", 10, "bold")).pack(pady=5)
-        self.txt_codigo = tk.Text(self.root, height=10, width=75, font=("Courier", 10))
-        self.txt_codigo.pack()
         
-        codigo_prueba = "int a = 100;\nint b = a;\nprint(b);\n\nstring c = \"Hola\";\nstring d = c;\nprint(d);"
-        self.txt_codigo.insert(tk.END, codigo_prueba)
 
-        tk.Button(self.root, text="Compilar y Optimizar", command=self.compilar_codigo, bg="lightgray").pack(pady=10)
 
-        tk.Label(self.root, text="Consola (Salida JS Optimizada):", font=("Arial", 10, "bold")).pack(pady=5)
-        self.txt_consola = tk.Text(self.root, height=12, width=75, font=("Courier", 10))
-        self.txt_consola.pack()
-
-    def compilar_codigo(self):
-        codigo = self.txt_codigo.get("1.0", tk.END).strip()
-        self.txt_consola.delete("1.0", tk.END)
-        
+    def run(self):
+        self.out.delete("1.0", tk.END)
         try:
-            tokens = self.lexer.tokenize(codigo)
-            parser = Parser(tokens)
-            ast = parser.parse()
-            self.semantic.analyze(ast)
-            ast_optimizado = self.optimizer.optimize(ast)
-            js_output = self.generator.generate(ast_optimizado)
-            
-            self.txt_consola.config(fg="blue")
-            self.txt_consola.insert(tk.END, "// --- COMPILACIÓN Y OPTIMIZACIÓN EXITOSA ---\n")
-            self.txt_consola.insert(tk.END, js_output)
-            
+            tokens = self.lexer.tokenize(self.txt.get("1.0", tk.END))
+            for t in tokens:
+                self.out.insert(tk.END, str(t) + "\\n")
         except Exception as e:
-            self.txt_consola.config(fg="red")
-            self.txt_consola.insert(tk.END, str(e))
+            self.out.insert(tk.END, str(e))
 
 if __name__ == "__main__":
     root = tk.Tk()
-    app = MainApp(root)
+    MainApp(root)
     root.mainloop()
