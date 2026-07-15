@@ -1,3 +1,161 @@
+
+
+int a = 48;
+int b = 18;
+int residuo = 0;
+
+while (b > 0) {
+    residuo = a - (a / b) * b;
+    a = b;
+    b = residuo;
+}
+print(a);
+
+
+
+int v1 = 8;
+int v2 = 3;
+int v3 = 5;
+
+int temp = 0;
+bool ordenado = false;
+while (ordenado == false) {
+    ordenado = true;
+    
+    if (v1 > v2) {
+        temp = v1;
+        v1 = v2;
+        v2 = temp;
+        ordenado = false;
+    }
+    
+    // Comparar v2 y v3
+    if (v2 > v3) {
+        temp = v2;
+        v2 = v3;
+        v3 = temp;
+        ordenado = false;
+    }
+}
+
+print(v1);
+print(v2);
+print(v3);
+
+
+
+bool is_prime(int n) {
+    if (n < 2) {
+        return false;
+    }
+    
+    int i = 2;
+    bool prime = true;
+    
+    while (i < n) {
+        int mod = n - (n / i) * i;
+        if (mod == 0) {
+            prime = false;
+        }
+        i = i + 1;
+    }
+    return prime;
+}
+
+print(is_prime(11));
+
+print(is_prime(15));
+
+
+
+int sumac(int n) {
+    if (n == 0) {
+        return 0;
+    }
+    
+    int quadrado = n * n;
+    return quadrado + sumac(n - 1);
+}
+
+int res_sq = sumac(4);
+print(res_sq);
+
+
+
+
+int collatz_steps(int n) {
+    int pasos = 0;
+    while (n > 1) {
+    
+        int mod2 = n - (n / 2) * 2;
+        
+        if (mod2 == 0) {
+            n = n / 2;
+        }
+        if (mod2 > 0) {
+            n = 3 * n + 1;
+        }
+        pasos = pasos + 1;
+    }
+    return pasos;
+}
+
+// Para n = 15, deve retornar 17 pasos
+int resultado_collatz = collatz_steps(15);
+print(resultado_collatz);
+
+
+
+
+
+int sqrt(int n) {
+    int i = 1;
+    
+    while (i * i < n) {
+        i = i + 1;
+    }
+    
+    if (i * i > n) {
+        return i - 1;
+    }
+    
+    // Se for raiz exata
+    return i;
+}
+
+int raiz = sqrt(26);
+print(raiz);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 Prueba 1: Propagación en cascada
 Verifica si el optimizador puede rastrear el valor a través de múltiples asignaciones seguidas antes de imprimir.
 

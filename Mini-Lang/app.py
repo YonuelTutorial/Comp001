@@ -26,6 +26,8 @@ TOKEN_REGEX = [
     ('RBRACE', r'\}'),
     ('LPAREN', r'\('),
     ('RPAREN', r'\)'),
+    ('LBRACKET', r'\['),
+    ('RBRACKET', r'\]'),
     ('COMMA', r','),
     ('SEMI', r';'),
     ('ID', r'[a-zA-Z_]\w*'),
@@ -64,9 +66,21 @@ class VarDecl:
         self.nombre = nombre
         self.valor = valor
 
+class ArrayDecl:
+    def __init__(self, tipo, nombre, size):
+        self.tipo = tipo
+        self.nombre = nombre
+        self.size = size
+
 class Assign:
     def __init__(self, nombre, valor):
         self.nombre = nombre
+        self.valor = valor
+
+class ArrayAssign:
+    def __init__(self, nombre, index, valor):
+        self.nombre = nombre
+        self.index = index
         self.valor = valor
 
 class IfStmt:
@@ -107,6 +121,11 @@ class VarAccess:
     def __init__(self, nombre):
         self.nombre = nombre
 
+class ArrayAccess:
+    def __init__(self, nombre, index):
+        self.nombre = nombre
+        self.index = index
+
 # ==========================================
 # SINTÁCTICO
 # ==========================================
@@ -140,6 +159,12 @@ class Parser:
                 self.match('RPAREN')
                 body = self.block()
                 return FuncDecl(tipo, nombre, param_tipo, param_nombre, body)
+            elif self.pos < len(self.tokens) and self.tokens[self.pos][0] == 'LBRACKET':
+                self.match('LBRACKET')
+                size = int(self.match('NUM')[1])
+                self.match('RBRACKET')
+                self.match('SEMI')
+                return ArrayDecl(tipo, nombre, size)
             else:
                 self.match('ASSIGN')
                 valor = self.expression()
@@ -177,10 +202,19 @@ class Parser:
             return ReturnStmt(expr)
         elif tok == 'ID':
             nombre = self.match('ID')[1]
-            self.match('ASSIGN')
-            valor = self.expression()
-            self.match('SEMI')
-            return Assign(nombre, valor)
+            if self.pos < len(self.tokens) and self.tokens[self.pos][0] == 'LBRACKET':
+                self.match('LBRACKET')
+                index = self.expression()
+                self.match('RBRACKET')
+                self.match('ASSIGN')
+                valor = self.expression()
+                self.match('SEMI')
+                return ArrayAssign(nombre, index, valor)
+            else:
+                self.match('ASSIGN')
+                valor = self.expression()
+                self.match('SEMI')
+                return Assign(nombre, valor)
         raise Exception("Sintaxis inválida")
 
     def block(self):
@@ -236,6 +270,11 @@ class Parser:
                 arg = self.expression()
                 self.match('RPAREN')
                 return CallExpr(nombre, arg)
+            elif self.pos < len(self.tokens) and self.tokens[self.pos][0] == 'LBRACKET':
+                self.match('LBRACKET')
+                index = self.expression()
+                self.match('RBRACKET')
+                return ArrayAccess(nombre, index)
             return VarAccess(nombre)
         elif tok[0] == 'LPAREN':
             self.match('LPAREN')
@@ -282,9 +321,16 @@ class SemanticAnalyzer:
         elif isinstance(node, VarDecl):
             t_val = self.visit(node.valor)
             self.env.declare(node.nombre, node.tipo)
+        elif isinstance(node, ArrayDecl):
+            self.env.declare(node.nombre, f"{node.tipo}_array")
         elif isinstance(node, Assign):
             t_var = self.env.get_type(node.nombre)
             t_val = self.visit(node.valor)
+        elif isinstance(node, ArrayAssign):
+            t_var = self.env.get_type(node.nombre)
+            t_idx = self.visit(node.index)
+            t_val = self.visit(node.valor)
+            if t_idx != 'int': raise Exception("Indice requiere int")
         elif isinstance(node, (IfStmt, WhileStmt)):
             self.visit(node.cond)
             prev = self.env
@@ -311,6 +357,11 @@ class SemanticAnalyzer:
             return node.tipo
         elif isinstance(node, VarAccess):
             return self.env.get_type(node.nombre)
+        elif isinstance(node, ArrayAccess):
+            t_var = self.env.get_type(node.nombre)
+            t_idx = self.visit(node.index)
+            if t_idx != 'int': raise Exception("Indice requiere int")
+            return t_var.replace('_array', '')
 
 # ==========================================
 # OPTIMIZADOR
@@ -324,7 +375,12 @@ class Optimizer:
             node.body = [self.visit(s) for s in node.body]
         elif isinstance(node, VarDecl):
             node.valor = self.visit(node.valor)
+        elif isinstance(node, ArrayDecl):
+            pass
         elif isinstance(node, Assign):
+            node.valor = self.visit(node.valor)
+        elif isinstance(node, ArrayAssign):
+            node.index = self.visit(node.index)
             node.valor = self.visit(node.valor)
         elif isinstance(node, (IfStmt, WhileStmt)):
             node.cond = self.visit(node.cond)
@@ -335,6 +391,8 @@ class Optimizer:
             node.expr = self.visit(node.expr)
         elif isinstance(node, CallExpr):
             node.arg = self.visit(node.arg)
+        elif isinstance(node, ArrayAccess):
+            node.index = self.visit(node.index)
         elif isinstance(node, BinOp):
             node.izq = self.visit(node.izq)
             node.der = self.visit(node.der)
@@ -351,6 +409,122 @@ class Optimizer:
                 t = 'int' if type(res) is int else 'bool'
                 return Literal(res, t)
         return node
+
+# ==========================================
+# GENERADOR DE CÓDIGO
+# ==========================================
+class CodeGenerator:
+    def __init__(self):
+        self.inst = []
+        self.temp_c = 0
+        self.label_c = 0
+
+    def get_label(self):
+        self.label_c += 1
+        return f"L{self.label_c}"
+
+    def get_temp(self):
+        self.temp_c += 1
+        return f"t{self.temp_c}"
+
+    def generate(self, ast):
+        self.inst = []
+        for nodo in ast:
+            self.visit(nodo)
+        return '\n'.join(self.inst)
+
+    def visit(self, nodo):
+        clase = type(nodo).__name__
+        metodo = getattr(self, f'visit_{clase}', self.visit_default)
+        return metodo(nodo)
+
+    def visit_default(self, nodo):
+        raise Exception(f"Nodo no soportado en generación: {type(nodo).__name__}")
+
+    def visit_FuncDecl(self, nodo):
+        self.inst.append(f"{nodo.nombre}:")
+        self.inst.append(f"POP {nodo.param_nombre}")
+        for stmt in nodo.body:
+            self.visit(stmt)
+        self.inst.append("RET")
+
+    def visit_VarDecl(self, nodo):
+        val = self.visit(nodo.valor)
+        self.inst.append(f"MOV {nodo.nombre}, {val}")
+
+    def visit_ArrayDecl(self, nodo):
+        self.inst.append(f"ALLOC_ARR {nodo.nombre}, {nodo.size}")
+
+    def visit_Assign(self, nodo):
+        val = self.visit(nodo.valor)
+        self.inst.append(f"MOV {nodo.nombre}, {val}")
+
+    def visit_ArrayAssign(self, nodo):
+        idx = self.visit(nodo.index)
+        val = self.visit(nodo.valor)
+        self.inst.append(f"STORE_ARR {nodo.nombre}[{idx}], {val}")
+
+    def visit_IfStmt(self, nodo):
+        cond = self.visit(nodo.cond)
+        l_fin = self.get_label()
+        self.inst.append(f"JMP_FALSE {cond}, {l_fin}")
+        for stmt in nodo.body:
+            self.visit(stmt)
+        self.inst.append(f"{l_fin}:")
+
+    def visit_WhileStmt(self, nodo):
+        l_inicio = self.get_label()
+        l_fin = self.get_label()
+        self.inst.append(f"{l_inicio}:")
+        cond = self.visit(nodo.cond)
+        self.inst.append(f"JMP_FALSE {cond}, {l_fin}")
+        for stmt in nodo.body:
+            self.visit(stmt)
+        self.inst.append(f"JMP {l_inicio}")
+        self.inst.append(f"{l_fin}:")
+
+    def visit_ReturnStmt(self, nodo):
+        val = self.visit(nodo.expr)
+        self.inst.append(f"PUSH {val}")
+        self.inst.append("RET")
+
+    def visit_Print(self, nodo):
+        val = self.visit(nodo.expr)
+        self.inst.append(f"PRINT {val}")
+
+    def visit_CallExpr(self, nodo):
+        arg = self.visit(nodo.arg)
+        self.inst.append(f"PUSH {arg}")
+        self.inst.append(f"CALL {nodo.nombre}")
+        temp = self.get_temp()
+        self.inst.append(f"POP {temp}")
+        return temp
+
+    def visit_BinOp(self, nodo):
+        izq = self.visit(nodo.izq)
+        der = self.visit(nodo.der)
+        temp = self.get_temp()
+        op_map = {
+            '+': 'ADD', '-': 'SUB', '*': 'MUL', '/': 'DIV',
+            '==': 'CMP_EQ', '<': 'CMP_LT', '>': 'CMP_GT'
+        }
+        self.inst.append(f"MOV {temp}, {izq}")
+        self.inst.append(f"{op_map[nodo.op]} {temp}, {der}")
+        return temp
+
+    def visit_Literal(self, nodo):
+        if nodo.tipo == 'bool':
+            return "1" if nodo.val else "0"
+        return str(nodo.val)
+
+    def visit_VarAccess(self, nodo):
+        return nodo.nombre
+
+    def visit_ArrayAccess(self, nodo):
+        idx = self.visit(nodo.index)
+        temp = self.get_temp()
+        self.inst.append(f"LOAD_ARR {temp}, {nodo.nombre}[{idx}]")
+        return temp
 
 # ==========================================
 # INTÉRPRETE
@@ -391,8 +565,15 @@ class Interpreter:
             self.env.set_var(node.nombre, node)
         elif isinstance(node, VarDecl):
             self.env.set_var(node.nombre, self.visit(node.valor))
+        elif isinstance(node, ArrayDecl):
+            val = [0] * node.size if node.tipo == 'int' else [False] * node.size
+            self.env.set_var(node.nombre, val)
         elif isinstance(node, Assign):
             self.env.update_var(node.nombre, self.visit(node.valor))
+        elif isinstance(node, ArrayAssign):
+            arr = self.env.get_var(node.nombre)
+            idx = self.visit(node.index)
+            arr[idx] = self.visit(node.valor)
         elif isinstance(node, IfStmt):
             if self.visit(node.cond):
                 prev = self.env
@@ -436,6 +617,10 @@ class Interpreter:
             return node.val
         elif isinstance(node, VarAccess):
             return self.env.get_var(node.nombre)
+        elif isinstance(node, ArrayAccess):
+            arr = self.env.get_var(node.nombre)
+            idx = self.visit(node.index)
+            return arr[idx]
 
 # ==========================================
 # INTERFAZ
@@ -443,46 +628,76 @@ class Interpreter:
 class MainApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Intérprete Completo: Recursividad y Ámbitos")
-        self.root.geometry("700x600")
+        self.root.title("Compilador - Soporte Arreglos")
+        self.root.geometry("750x700")
         self.setup_ui()
 
     def setup_ui(self):
-        tk.Label(self.root, text="Código Fuente:", font=("Arial", 10, "bold")).pack(pady=5)
-        self.txt_codigo = tk.Text(self.root, height=15, width=80, font=("Courier", 10))
+        tk.Label(self.root, text="Código Fuente:", font=("Arial", 10, "bold")).pack(pady=2)
+        self.txt_codigo = tk.Text(self.root, height=14, width=85, font=("Courier", 10))
         self.txt_codigo.pack()
         
         codigo_prueba = (
-            "int factorial(int n) {\n"
-            "    if (n == 0) {\n"
-            "        return 1;\n"
+            "int lista[5];\n"
+            "lista[0] = 8;\n"
+            "lista[1] = 3;\n"
+            "lista[2] = 5;\n"
+            "lista[3] = 1;\n"
+            "lista[4] = 9;\n\n"
+            "int temp = 0;\n"
+            "bool orden = false;\n"
+            "int i = 0;\n\n"
+            "while (orden == false) {\n"
+            "    orden = true;\n"
+            "    i = 0;\n"
+            "    while (i < 4) {\n"
+            "        if (lista[i] > lista[i + 1]) {\n"
+            "            temp = lista[i];\n"
+            "            lista[i] = lista[i + 1];\n"
+            "            lista[i + 1] = temp;\n"
+            "            orden = false;\n"
+            "        }\n"
+            "        i = i + 1;\n"
             "    }\n"
-            "    return n * factorial(n - 1);\n"
             "}\n\n"
-            "int res_fact = factorial(5);\n"
-            "print(res_fact);"
+            "i = 0;\n"
+            "while (i < 5) {\n"
+            "    print(lista[i]);\n"
+            "    i = i + 1;\n"
+            "}"
         )
         self.txt_codigo.insert(tk.END, codigo_prueba)
         
-        tk.Button(self.root, text="Ejecutar", command=self.ejecutar_codigo, bg="lightgray").pack(pady=10)
+        tk.Button(self.root, text="Compilar y Ejecutar", command=self.ejecutar_codigo, bg="lightgray").pack(pady=5)
 
-        tk.Label(self.root, text="Salida (Intérprete):", font=("Arial", 10, "bold")).pack(pady=5)
-        self.txt_consola = tk.Text(self.root, height=10, width=80, font=("Courier", 10))
+        tk.Label(self.root, text="Salida (Intérprete):", font=("Arial", 10, "bold")).pack(pady=2)
+        self.txt_consola = tk.Text(self.root, height=5, width=85, font=("Courier", 10))
         self.txt_consola.pack()
+
+        tk.Label(self.root, text="Código Destino (Ensamblador):", font=("Arial", 10, "bold")).pack(pady=2)
+        self.txt_asm = tk.Text(self.root, height=12, width=85, font=("Courier", 10))
+        self.txt_asm.pack()
 
     def ejecutar_codigo(self):
         codigo = self.txt_codigo.get("1.0", tk.END).strip()
         self.txt_consola.delete("1.0", tk.END)
+        self.txt_asm.delete("1.0", tk.END)
         
         try:
             tokens = Lexer().tokenize(codigo)
             ast = Parser(tokens).parse()
+            
             SemanticAnalyzer().analyze(ast)
             ast_opt = Optimizer().optimize(ast)
+            
             salida = Interpreter().ejecutar(ast_opt)
+            ensamblador = CodeGenerator().generate(ast_opt)
             
             self.txt_consola.config(fg="black")
             self.txt_consola.insert(tk.END, salida)
+            
+            self.txt_asm.config(fg="blue")
+            self.txt_asm.insert(tk.END, ensamblador)
             
         except Exception as e:
             self.txt_consola.config(fg="red")
