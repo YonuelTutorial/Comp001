@@ -154,7 +154,9 @@ class Parser:
             
             if self.pos < len(self.tokens) and self.tokens[self.pos][0] == 'LPAREN':
                 self.match('LPAREN')
-                param_tipo = self.match('INT_T')[1]
+                if self.tokens[self.pos][0] not in ('INT_T', 'BOOL_T'):
+                    raise Exception("Error sintáctico, se esperaba un tipo de parámetro")
+                param_tipo = self.match(self.tokens[self.pos][0])[1]
                 param_nombre = self.match('ID')[1]
                 self.match('RPAREN')
                 body = self.block()
@@ -220,8 +222,10 @@ class Parser:
     def block(self):
         self.match('LBRACE')
         stmts = []
-        while self.tokens[self.pos][0] != 'RBRACE':
+        while self.pos < len(self.tokens) and self.tokens[self.pos][0] != 'RBRACE':
             stmts.append(self.declaration())
+        if self.pos >= len(self.tokens):
+            raise Exception("Error sintáctico: falta '}'")
         self.match('RBRACE')
         return stmts
 
@@ -304,64 +308,118 @@ class Environment:
         raise Exception(f"'{name}' no declarada")
 
 class SemanticAnalyzer:
+    def __init__(self):
+        self.funcs = {}
+        self.current_return_type = None
+
     def analyze(self, ast):
         self.env = Environment()
+        self.funcs.clear()
+        self.current_return_type = None
         for node in ast:
             self.visit(node)
 
+    def type_of(self, node):
+        if isinstance(node, Literal):
+            return node.tipo
+        if isinstance(node, VarAccess):
+            return self.env.get_type(node.nombre)
+        if isinstance(node, ArrayAccess):
+            t_var = self.env.get_type(node.nombre)
+            t_idx = self.type_of(node.index)
+            if t_idx != 'int':
+                raise Exception("Indice requiere int")
+            if not t_var.endswith('_array'):
+                raise Exception(f"'{node.nombre}' no es un arreglo")
+            return t_var.replace('_array', '')
+        if isinstance(node, BinOp):
+            t_izq = self.type_of(node.izq)
+            t_der = self.type_of(node.der)
+            if node.op in ('+', '-', '*', '/'):
+                if t_izq != 'int' or t_der != 'int':
+                    raise Exception("Operación aritmética requiere enteros")
+                return 'int'
+            if node.op in ('<', '>'):
+                if t_izq != 'int' or t_der != 'int':
+                    raise Exception("Comparación relacional requiere enteros")
+                return 'bool'
+            if node.op == '==':
+                if t_izq != t_der:
+                    raise Exception("Comparación de igualdad entre tipos incompatibles")
+                return 'bool'
+        if isinstance(node, CallExpr):
+            return self.visit(node)
+        raise Exception(f"No se puede inferir el tipo de {type(node).__name__}")
+
     def visit(self, node):
         if isinstance(node, FuncDecl):
-            self.env.declare(node.nombre, node.tipo)
+            if node.nombre in self.funcs:
+                raise Exception(f"Función '{node.nombre}' ya declarada")
+            self.funcs[node.nombre] = node
             prev = self.env
             self.env = Environment(prev)
             self.env.declare(node.param_nombre, node.param_tipo)
+            prev_return = self.current_return_type
+            self.current_return_type = node.tipo
             for stmt in node.body:
                 self.visit(stmt)
+            self.current_return_type = prev_return
             self.env = prev
         elif isinstance(node, VarDecl):
-            t_val = self.visit(node.valor)
+            t_val = self.type_of(node.valor)
+            if t_val != node.tipo:
+                raise Exception(f"No se puede asignar '{t_val}' a '{node.nombre}' de tipo '{node.tipo}'")
             self.env.declare(node.nombre, node.tipo)
         elif isinstance(node, ArrayDecl):
             self.env.declare(node.nombre, f"{node.tipo}_array")
         elif isinstance(node, Assign):
             t_var = self.env.get_type(node.nombre)
-            t_val = self.visit(node.valor)
+            t_val = self.type_of(node.valor)
+            if t_var.endswith('_array'):
+                raise Exception(f"'{node.nombre}' es un arreglo y no puede asignarse directamente")
+            if t_var != t_val:
+                raise Exception(f"No se puede asignar '{t_val}' a '{node.nombre}' de tipo '{t_var}'")
         elif isinstance(node, ArrayAssign):
             t_var = self.env.get_type(node.nombre)
-            t_idx = self.visit(node.index)
-            t_val = self.visit(node.valor)
-            if t_idx != 'int': raise Exception("Indice requiere int")
+            t_idx = self.type_of(node.index)
+            t_val = self.type_of(node.valor)
+            if t_idx != 'int':
+                raise Exception("Indice requiere int")
+            if not t_var.endswith('_array'):
+                raise Exception(f"'{node.nombre}' no es un arreglo")
+            if t_var.replace('_array', '') != t_val:
+                raise Exception(f"No se puede asignar '{t_val}' a elementos de '{node.nombre}'")
         elif isinstance(node, (IfStmt, WhileStmt)):
-            self.visit(node.cond)
+            if self.type_of(node.cond) != 'bool':
+                raise Exception("La condición debe ser booleana")
             prev = self.env
             self.env = Environment(prev)
             for stmt in node.body:
                 self.visit(stmt)
             self.env = prev
         elif isinstance(node, ReturnStmt):
-            self.visit(node.expr)
+            t_ret = self.type_of(node.expr)
+            if self.current_return_type is not None and t_ret != self.current_return_type:
+                raise Exception(f"Return incompatible: se esperaba '{self.current_return_type}' y se obtuvo '{t_ret}'")
         elif isinstance(node, Print):
-            self.visit(node.expr)
+            self.type_of(node.expr)
         elif isinstance(node, CallExpr):
-            self.env.get_type(node.nombre)
-            self.visit(node.arg)
-            return 'int'
+            if node.nombre not in self.funcs:
+                raise Exception(f"Función '{node.nombre}' no declarada")
+            func = self.funcs[node.nombre]
+            t_arg = self.type_of(node.arg)
+            if t_arg != func.param_tipo:
+                raise Exception(f"Argumento incompatible en llamada a '{node.nombre}'")
+            return func.tipo
         elif isinstance(node, BinOp):
-            t_izq = self.visit(node.izq)
-            t_der = self.visit(node.der)
-            if node.op in ('+', '-', '*', '/'):
-                return 'int'
-            elif node.op in ('==', '<', '>'):
-                return 'bool'
+            return self.type_of(node)
         elif isinstance(node, Literal):
             return node.tipo
         elif isinstance(node, VarAccess):
             return self.env.get_type(node.nombre)
         elif isinstance(node, ArrayAccess):
-            t_var = self.env.get_type(node.nombre)
-            t_idx = self.visit(node.index)
-            if t_idx != 'int': raise Exception("Indice requiere int")
-            return t_var.replace('_array', '')
+            return self.type_of(node)
+        return None
 
 # ==========================================
 # OPTIMIZADOR
@@ -544,13 +602,17 @@ class InterpEnv:
     def update_var(self, name, val):
         if name in self.vars:
             self.vars[name] = val
-        else:
+        elif self.parent:
             self.parent.update_var(name, val)
+        else:
+            raise Exception(f"'{name}' no declarada")
 
     def get_var(self, name):
         if name in self.vars:
             return self.vars[name]
-        return self.parent.get_var(name)
+        if self.parent:
+            return self.parent.get_var(name)
+        raise Exception(f"'{name}' no declarada")
 
 class Interpreter:
     def ejecutar(self, ast):
