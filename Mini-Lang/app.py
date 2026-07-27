@@ -690,7 +690,7 @@ class Interpreter:
 class MainApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Compilador - Soporte Arreglos")
+        self.root.title("Compilador v3.4")
         self.root.geometry("750x700")
         self.setup_ui()
 
