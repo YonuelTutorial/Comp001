@@ -207,6 +207,15 @@ class MainApp:
         file_menu.add_command(label="Salir", command=self.close)
         menu.add_cascade(label="Archivo", menu=file_menu)
 
+        compile_menu = tk.Menu(menu, tearoff=False)
+        compile_menu.add_command(
+            label="Compilar a pseudoensamblador...", command=self.compile_assembly
+        )
+        compile_menu.add_command(
+            label="Compilar a JavaScript...", command=self.compile_javascript
+        )
+        menu.add_cascade(label="Compilar", menu=compile_menu)
+
         edit_menu = tk.Menu(menu, tearoff=False)
         edit_menu.add_command(label="Buscar", accelerator="Ctrl+F", command=self.find_text)
         edit_menu.add_command(label="Reemplazar", accelerator="Ctrl+H", command=self.replace_text)
@@ -247,6 +256,52 @@ class MainApp:
             self.notebook.select(self.panels["Salida"].master)
         except Exception as error:
             self._show_error(error)
+
+    def compile_assembly(self):
+        return self._export_compilation(
+            label="Pseudoensamblador",
+            attribute="assembly",
+            extension=".asm",
+            filetypes=(
+                ("Pseudoensamblador", "*.asm"),
+                ("Texto", "*.txt"),
+                ("Binario simulado", "*.bin"),
+                ("Todos", "*.*"),
+            ),
+        )
+
+    def compile_javascript(self):
+        return self._export_compilation(
+            label="JavaScript",
+            attribute="javascript",
+            extension=".js",
+            filetypes=(("JavaScript", "*.js"), ("Texto", "*.txt"), ("Todos", "*.*")),
+        )
+
+    def _export_compilation(self, label, attribute, extension, filetypes):
+        try:
+            result = Compiler(max_steps=1_000_000, max_call_depth=500).compile(
+                self.editor.get(), self.current_file
+            )
+            source_name = Path(self.current_file).stem if self.current_file else "programa"
+            path = filedialog.asksaveasfilename(
+                parent=self.root,
+                title=f"Compilar a {label}",
+                defaultextension=extension,
+                initialfile=f"{source_name}{extension}",
+                filetypes=filetypes,
+            )
+            if not path:
+                return False
+            Path(path).write_text(getattr(result, attribute), encoding="utf-8")
+            self.last_result = result
+            self._show_result(result)
+            self._set_panel("Errores", "")
+            self.status.set(f"Compilado a {label}: {path}")
+            return True
+        except Exception as error:
+            self._show_error(error)
+            return False
 
     def start_debug(self):
         self._prepare_inputs()
