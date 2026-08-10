@@ -1,0 +1,313 @@
+// PRUEBA 01 - BURBUJA
+int burbuja[6];
+burbuja[0] = 9;
+burbuja[1] = 4;
+burbuja[2] = 7;
+burbuja[3] = 1;
+burbuja[4] = 3;
+burbuja[5] = 2;
+int b_i = 0;
+int b_j = 0;
+int b_temp = 0;
+while (b_i < 6) {
+    b_j = 0;
+    while (b_j < 5 - b_i) {
+        if (burbuja[b_j] > burbuja[b_j + 1]) {
+            b_temp = burbuja[b_j];
+            burbuja[b_j] = burbuja[b_j + 1];
+            burbuja[b_j + 1] = b_temp;
+        }
+        b_j = b_j + 1;
+    }
+    b_i = b_i + 1;
+}
+b_i = 0;
+while (b_i < 6) {
+    print(burbuja[b_i]);
+    b_i = b_i + 1;
+}
+
+// PRUEBA 02 - FACTORIAL
+int factorialAvanzado(int n) {
+    if (n <= 1) {
+        return 1;
+    }
+    return n * factorialAvanzado(n - 1);
+}
+print(factorialAvanzado(6));
+
+// PRUEBA 03 - FIBONACCI
+int fibonacciAvanzado(int n) {
+    if (n <= 1) {
+        return n;
+    }
+    return fibonacciAvanzado(n - 1) + fibonacciAvanzado(n - 2);
+}
+print(fibonacciAvanzado(10));
+
+// PRUEBA 04 - PRIMOS
+bool esPrimoAvanzado(int n) {
+    if (n < 2) {
+        return false;
+    }
+    int divisor = 2;
+    while (divisor * divisor <= n) {
+        if ((n / divisor) * divisor == n) {
+            return false;
+        }
+        divisor = divisor + 1;
+    }
+    return true;
+}
+print(esPrimoAvanzado(29));
+print(esPrimoAvanzado(30));
+
+// PRUEBA 05 - PERFECTOS
+bool esPerfectoAvanzado(int n) {
+    if (n < 2) {
+        return false;
+    }
+    int divisor = 1;
+    int suma = 0;
+    while (divisor < n) {
+        if ((n / divisor) * divisor == n) {
+            suma = suma + divisor;
+        }
+        divisor = divisor + 1;
+    }
+    return suma == n;
+}
+print(esPerfectoAvanzado(6));
+print(esPerfectoAvanzado(28));
+print(esPerfectoAvanzado(12));
+
+// PRUEBA 06 - CAPICUAS
+int invertirNumero(int n) {
+    int invertido = 0;
+    int digito = 0;
+    while (n > 0) {
+        digito = n - (n / 10) * 10;
+        invertido = invertido * 10 + digito;
+        n = n / 10;
+    }
+    return invertido;
+}
+bool esCapicua(int n) {
+    return n == invertirNumero(n);
+}
+print(esCapicua(12321));
+print(esCapicua(12345));
+
+// PRUEBA 07 - SUMA DE DIGITOS
+int sumaDigitos(int n) {
+    int suma = 0;
+    while (n > 0) {
+        suma = suma + n - (n / 10) * 10;
+        n = n / 10;
+    }
+    return suma;
+}
+print(sumaDigitos(9876));
+
+// PRUEBA 08 - POTENCIA RECURSIVA
+int potenciaRecursiva(int base, int exponente) {
+    if (exponente == 0) {
+        return 1;
+    }
+    return base * potenciaRecursiva(base, exponente - 1);
+}
+print(potenciaRecursiva(2, 10));
+
+// PRUEBA 09 - MAXIMO COMUN DIVISOR
+int maximoComunDivisor(int a, int b) {
+    int residuo = 0;
+    while (b != 0) {
+        residuo = a - (a / b) * b;
+        a = b;
+        b = residuo;
+    }
+    return a;
+}
+print(maximoComunDivisor(84, 30));
+
+// PRUEBA 10 - CALCULADORA
+int calcularSuma(int a, int b) {
+    return a + b;
+}
+int calcularResta(int a, int b) {
+    return a - b;
+}
+int calcularProducto(int a, int b) {
+    return a * b;
+}
+int calcularDivision(int a, int b) {
+    return a / b;
+}
+print(calcularSuma(7, 5));
+print(calcularResta(7, 5));
+print(calcularProducto(7, 5));
+print(calcularDivision(15, 5));
+
+// PRUEBA 11 - STRINGS
+bool mismoTexto(string a, string b) {
+    return a == b;
+}
+string repetirTexto(string texto) {
+    return texto;
+}
+print(mismoTexto("hola", "hola"));
+print(mismoTexto("hola", "Hola"));
+print(repetirTexto("cadena con espacios"));
+print("linea\nnueva");
+
+// PRUEBA 12 - RECURSIVIDAD MUTUA
+bool numeroPar(int n) {
+    if (n == 0) {
+        return true;
+    }
+    return numeroImpar(n - 1);
+}
+bool numeroImpar(int n) {
+    if (n == 0) {
+        return false;
+    }
+    return numeroPar(n - 1);
+}
+print(numeroPar(20));
+print(numeroImpar(20));
+
+// PRUEBA 13 - NUMERO TRIANGULAR
+int numeroTriangular(int n) {
+    if (n <= 1) {
+        return n;
+    }
+    return n + numeroTriangular(n - 1);
+}
+print(numeroTriangular(10));
+
+// PRUEBA 14 - BUSQUEDA LINEAL
+int lineal[5];
+lineal[0] = 4;
+lineal[1] = 8;
+lineal[2] = 15;
+lineal[3] = 16;
+lineal[4] = 23;
+int linealObjetivo = 16;
+int linealIndice = 0;
+int linealResultado = -1;
+while (linealIndice < 5 && linealResultado == -1) {
+    if (lineal[linealIndice] == linealObjetivo) {
+        linealResultado = linealIndice;
+    }
+    linealIndice = linealIndice + 1;
+}
+print(linealResultado);
+
+// PRUEBA 15 - BUSQUEDA BINARIA
+int binaria[7];
+binaria[0] = 2;
+binaria[1] = 5;
+binaria[2] = 8;
+binaria[3] = 12;
+binaria[4] = 16;
+binaria[5] = 23;
+binaria[6] = 38;
+int binariaObjetivo = 23;
+int binariaInicio = 0;
+int binariaFin = 6;
+int binariaMedio = 0;
+int binariaResultado = -1;
+while (binariaInicio <= binariaFin && binariaResultado == -1) {
+    binariaMedio = (binariaInicio + binariaFin) / 2;
+    if (binaria[binariaMedio] == binariaObjetivo) {
+        binariaResultado = binariaMedio;
+    } else {
+        if (binaria[binariaMedio] < binariaObjetivo) {
+            binariaInicio = binariaMedio + 1;
+        } else {
+            binariaFin = binariaMedio - 1;
+        }
+    }
+}
+print(binariaResultado);
+
+// PRUEBA 16 - MINIMO Y MAXIMO
+int extremos[5];
+extremos[0] = 12;
+extremos[1] = 3;
+extremos[2] = 27;
+extremos[3] = 8;
+extremos[4] = 15;
+int extremoMinimo = extremos[0];
+int extremoMaximo = extremos[0];
+int extremoIndice = 1;
+while (extremoIndice < 5) {
+    if (extremos[extremoIndice] < extremoMinimo) {
+        extremoMinimo = extremos[extremoIndice];
+    }
+    if (extremos[extremoIndice] > extremoMaximo) {
+        extremoMaximo = extremos[extremoIndice];
+    }
+    extremoIndice = extremoIndice + 1;
+}
+print(extremoMinimo);
+print(extremoMaximo);
+
+// PRUEBA 17 - SUMA Y PROMEDIO
+int promedios[5];
+promedios[0] = 10;
+promedios[1] = 20;
+promedios[2] = 30;
+promedios[3] = 15;
+promedios[4] = 25;
+int promedioIndice = 0;
+int promedioSuma = 0;
+while (promedioIndice < 5) {
+    promedioSuma = promedioSuma + promedios[promedioIndice];
+    promedioIndice = promedioIndice + 1;
+}
+print(promedioSuma);
+print(promedioSuma / 5);
+
+// PRUEBA 18 - ANO BISIESTO
+bool divisiblePor(int numero, int divisor) {
+    return (numero / divisor) * divisor == numero;
+}
+bool esBisiesto(int ano) {
+    if (divisiblePor(ano, 400)) {
+        return true;
+    }
+    if (divisiblePor(ano, 100)) {
+        return false;
+    }
+    return divisiblePor(ano, 4);
+}
+print(esBisiesto(2024));
+print(esBisiesto(1900));
+print(esBisiesto(2000));
+
+// PRUEBA 19 - CONTEO DE PRIMOS
+int conteoPrimos = 0;
+int candidatoPrimo = 2;
+while (candidatoPrimo <= 30) {
+    if (esPrimoAvanzado(candidatoPrimo)) {
+        conteoPrimos = conteoPrimos + 1;
+    }
+    candidatoPrimo = candidatoPrimo + 1;
+}
+print(conteoPrimos);
+
+// PRUEBA 20 - COLLATZ
+int pasosCollatz(int n) {
+    int pasos = 0;
+    while (n != 1) {
+        if ((n / 2) * 2 == n) {
+            n = n / 2;
+        } else {
+            n = n * 3 + 1;
+        }
+        pasos = pasos + 1;
+    }
+    return pasos;
+}
+print(pasosCollatz(6));
