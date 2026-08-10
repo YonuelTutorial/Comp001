@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 
 from .errors import MiniLangRuntimeError
 from .interpreter import UNINITIALIZED
+from .builtins import BUILTINS, execute_builtin
 
 
 @dataclass
@@ -21,11 +22,16 @@ class Frame:
 
 
 class VirtualMachine:
-    def __init__(self, max_steps=100_000, max_call_depth=500):
+    def __init__(self, max_steps=100_000, max_call_depth=500, input_provider=None):
         self.max_steps = max_steps
         self.max_call_depth = max_call_depth
+        self.input_provider = input_provider
 
     def execute(self, program):
+        self.load(program)
+        return self.run()
+
+    def load(self, program):
         self.instructions = program.instructions
         self.labels = {}
         self.functions = {}
@@ -43,19 +49,51 @@ class VirtualMachine:
         self.call_stack = []
         self.ip = 0
         self.steps = 0
+        self.halted = False
+        return self
 
-        while self.ip < len(self.instructions):
-            instruction = self.instructions[self.ip]
-            self.ip += 1
-            self.steps += 1
-            if self.steps > self.max_steps:
-                raise MiniLangRuntimeError(
-                    f"se superó el límite de {self.max_steps} instrucciones; posible ciclo infinito",
-                    instruction.token,
-                )
-            if self._execute_instruction(instruction):
-                break
+    def run(self):
+        while not self.halted:
+            self.step()
         return "\n".join(self.output)
+
+    def step(self):
+        if self.halted:
+            return None
+        if self.ip >= len(self.instructions):
+            self.halted = True
+            return None
+        instruction = self.instructions[self.ip]
+        self.ip += 1
+        self.steps += 1
+        if self.steps > self.max_steps:
+            raise MiniLangRuntimeError(
+                f"se superó el límite de {self.max_steps} instrucciones; posible ciclo infinito",
+                instruction.token,
+            )
+        if self._execute_instruction(instruction):
+            self.halted = True
+        return instruction
+
+    def snapshot(self):
+        return {
+            "ip": self.ip,
+            "steps": self.steps,
+            "halted": self.halted,
+            "stack": list(self.stack),
+            "call_depth": len(self.call_stack),
+            "globals": self._visible_values(self.global_frame),
+            "locals": self._visible_values(self.frame),
+            "output": list(self.output),
+        }
+
+    @staticmethod
+    def _visible_values(frame):
+        values = {}
+        for scope in frame.scopes:
+            for name, value in scope.items():
+                values[name] = "<sin inicializar>" if value is UNINITIALIZED else value
+        return values
 
     def _execute_instruction(self, instruction):
         op = instruction.op
@@ -89,7 +127,7 @@ class VirtualMachine:
             self._store(args[0], self._pop(token), token)
         elif op == "ALLOC_ARRAY":
             name, size, tipo = args
-            default = {"int": 0, "bool": False, "string": ""}[tipo]
+            default = {"int": 0, "float": 0.0, "bool": False, "string": ""}[tipo]
             self.frame.declare(name, [default for _ in range(size)], token)
         elif op == "LOAD_ARRAY":
             array = self._load(args[0], token)
@@ -113,7 +151,7 @@ class VirtualMachine:
         elif op in ("NEG", "NOT"):
             value = self._pop(token)
             self.stack.append(-value if op == "NEG" else not value)
-        elif op in ("ADD", "SUB", "MUL", "DIV", "EQ", "NE", "LT", "LE", "GT", "GE"):
+        elif op in ("ADD", "SUB", "MUL", "DIV", "MOD", "POW", "EQ", "NE", "LT", "LE", "GT", "GE"):
             right = self._pop(token)
             left = self._pop(token)
             self.stack.append(self._binary(op, left, right, token))
@@ -127,6 +165,10 @@ class VirtualMachine:
         return False
 
     def _call(self, name, argument_count, token):
+        if name in BUILTINS:
+            values = [self._pop(token) for _ in range(argument_count)][::-1]
+            self.stack.append(execute_builtin(name, values, self.input_provider, token))
+            return
         if name not in self.functions:
             raise MiniLangRuntimeError(f"función '{name}' no declarada", token)
         if len(self.call_stack) >= self.max_call_depth:
@@ -194,7 +236,15 @@ class VirtualMachine:
         if op == "DIV":
             if right == 0:
                 raise MiniLangRuntimeError("división por cero", token)
-            return left // right
+            return left // right if type(left) is int and type(right) is int else left / right
+        if op == "MOD":
+            if right == 0:
+                raise MiniLangRuntimeError("módulo por cero", token)
+            return left % right
+        if op == "POW":
+            if type(left) is int and type(right) is int and right < 0:
+                raise MiniLangRuntimeError("un exponente entero no puede ser negativo", token)
+            return left ** right
         if op == "EQ":
             return left == right
         if op == "NE":

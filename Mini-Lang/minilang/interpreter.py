@@ -4,10 +4,12 @@ from .ast_nodes import (
     ArrayDecl,
     Assign,
     BinOp,
+    BlockStmt,
     BreakStmt,
     CallExpr,
     ContinueStmt,
     ExprStmt,
+    ForStmt,
     FuncDecl,
     IfStmt,
     Literal,
@@ -18,6 +20,7 @@ from .ast_nodes import (
     VarDecl,
     WhileStmt,
 )
+from .builtins import BUILTINS, execute_builtin
 from .errors import MiniLangRuntimeError
 
 
@@ -68,9 +71,10 @@ class InterpEnv:
 
 
 class Interpreter:
-    def __init__(self, max_steps=100_000, max_call_depth=500):
+    def __init__(self, max_steps=100_000, max_call_depth=500, input_provider=None):
         self.max_steps = max_steps
         self.max_call_depth = max_call_depth
+        self.input_provider = input_provider
 
     def ejecutar(self, ast):
         self.salida = []
@@ -98,7 +102,7 @@ class Interpreter:
             value = UNINITIALIZED if node.valor is None else self.visit(node.valor)
             self.env.set_var(node.nombre, value)
         elif isinstance(node, ArrayDecl):
-            defaults = {"int": 0, "bool": False, "string": ""}
+            defaults = {"int": 0, "float": 0.0, "bool": False, "string": ""}
             self.env.set_var(node.nombre, [defaults[node.tipo] for _ in range(node.size)])
         elif isinstance(node, Assign):
             self.env.update_var(node.nombre, self.visit(node.valor), node.token)
@@ -119,6 +123,23 @@ class Interpreter:
                     continue
                 except BreakException:
                     break
+        elif isinstance(node, ForStmt):
+            previous = self.env
+            self.env = InterpEnv(previous)
+            try:
+                if node.init is not None:
+                    self.visit(node.init)
+                while self.visit(node.cond):
+                    try:
+                        self._execute_block(node.body)
+                    except ContinueException:
+                        pass
+                    except BreakException:
+                        break
+                    if node.update is not None:
+                        self.visit(node.update)
+            finally:
+                self.env = previous
         elif isinstance(node, ReturnStmt):
             raise ReturnException(None if node.expr is None else self.visit(node.expr))
         elif isinstance(node, BreakStmt):
@@ -129,6 +150,8 @@ class Interpreter:
             self.salida.append(str(self.visit(node.expr)))
         elif isinstance(node, ExprStmt):
             self.visit(node.expr)
+        elif isinstance(node, BlockStmt):
+            self._execute_block(node.body)
         elif isinstance(node, CallExpr):
             return self._call(node)
         elif isinstance(node, BinOp):
@@ -147,6 +170,9 @@ class Interpreter:
             return array[index]
 
     def _call(self, node):
+        if node.nombre in BUILTINS:
+            values = [self.visit(argument) for argument in node.args]
+            return execute_builtin(node.nombre, values, self.input_provider, node.token)
         function = self.funcs.get(node.nombre)
         if function is None:
             raise MiniLangRuntimeError(f"función '{node.nombre}' no declarada", node.token)
@@ -200,7 +226,15 @@ class Interpreter:
         if node.op == "/":
             if right == 0:
                 raise MiniLangRuntimeError("división por cero", node.token)
-            return left // right
+            return left // right if type(left) is int and type(right) is int else left / right
+        if node.op == "%":
+            if right == 0:
+                raise MiniLangRuntimeError("módulo por cero", node.token)
+            return left % right
+        if node.op == "^":
+            if type(left) is int and type(right) is int and right < 0:
+                raise MiniLangRuntimeError("un exponente entero no puede ser negativo", node.token)
+            return left ** right
         if node.op == "==":
             return left == right
         if node.op == "!=":

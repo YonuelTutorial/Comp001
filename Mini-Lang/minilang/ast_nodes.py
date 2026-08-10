@@ -75,6 +75,21 @@ class WhileStmt:
 
 
 @dataclass
+class ForStmt:
+    init: Optional[object]
+    cond: object
+    update: Optional[object]
+    body: list
+    token: Optional[Token] = None
+
+
+@dataclass
+class ImportStmt:
+    path: str
+    token: Optional[Token] = None
+
+
+@dataclass
 class ReturnStmt:
     expr: Optional[object]
     token: Optional[Token] = None
@@ -99,6 +114,12 @@ class Print:
 @dataclass
 class ExprStmt:
     expr: object
+    token: Optional[Token] = None
+
+
+@dataclass
+class BlockStmt:
+    body: list
     token: Optional[Token] = None
 
 

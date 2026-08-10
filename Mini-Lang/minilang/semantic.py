@@ -6,12 +6,15 @@ from .ast_nodes import (
     ArrayDecl,
     Assign,
     BinOp,
+    BlockStmt,
     BreakStmt,
     CallExpr,
     ContinueStmt,
     ExprStmt,
+    ForStmt,
     FuncDecl,
     IfStmt,
+    ImportStmt,
     Literal,
     Print,
     ReturnStmt,
@@ -21,6 +24,7 @@ from .ast_nodes import (
     WhileStmt,
 )
 from .errors import SemanticError
+from .builtins import BUILTINS
 
 
 @dataclass(frozen=True)
@@ -71,10 +75,13 @@ class SemanticAnalyzer:
     def analyze(self, ast):
         self.global_env = Environment()
         self.env = self.global_env
-        self.funcs.clear()
+        self.funcs = {
+            name: FunctionSignature(spec.return_type, spec.params, None)
+            for name, spec in BUILTINS.items()
+        }
         self.current_return_type = None
         self.loop_depth = 0
-        global_names = set()
+        global_names = set(BUILTINS)
 
         # Registro global
         for node in ast:
@@ -92,6 +99,22 @@ class SemanticAnalyzer:
         # Análisis
         for node in ast:
             self.visit(node, predeclared=isinstance(node, (VarDecl, ArrayDecl)))
+
+    def symbol_table(self):
+        variables = {}
+        for name, symbol in self.global_env.vars.items():
+            variables[name] = {
+                "type": symbol.tipo,
+                "array_size": symbol.array_size,
+            }
+        functions = {}
+        for name, signature in self.funcs.items():
+            functions[name] = {
+                "return_type": signature.return_type,
+                "params": list(signature.params),
+                "builtin": signature.declaration is None,
+            }
+        return {"variables": variables, "functions": functions}
 
     @staticmethod
     def _reserve_global_name(name, token, names):
@@ -113,25 +136,36 @@ class SemanticAnalyzer:
             return symbol.tipo
         if isinstance(node, UnaryOp):
             expr_type = self.type_of(node.expr)
-            if node.op == "-" and expr_type == "int":
-                return "int"
+            if node.op == "-" and expr_type in ("int", "float"):
+                return expr_type
             if node.op == "!" and expr_type == "bool":
                 return "bool"
-            expected = "int" if node.op == "-" else "bool"
+            expected = "un número" if node.op == "-" else "bool"
             raise SemanticError(f"el operador '{node.op}' requiere {expected}", node.token)
         if isinstance(node, BinOp):
             left_type = self.type_of(node.izq)
             right_type = self.type_of(node.der)
+            if node.op == "+" and left_type == right_type == "string":
+                return "string"
             if node.op in ("+", "-", "*", "/"):
+                if not self._both_numeric(left_type, right_type):
+                    raise SemanticError("la operación aritmética requiere números", node.token)
+                return "float" if "float" in (left_type, right_type) else "int"
+            if node.op == "%":
                 if left_type != "int" or right_type != "int":
-                    raise SemanticError("la operación aritmética requiere enteros", node.token)
+                    raise SemanticError("el módulo requiere enteros", node.token)
                 return "int"
+            if node.op == "^":
+                if not self._both_numeric(left_type, right_type):
+                    raise SemanticError("la potencia requiere números", node.token)
+                return "float" if "float" in (left_type, right_type) else "int"
             if node.op in ("<", "<=", ">", ">="):
-                if left_type != "int" or right_type != "int":
-                    raise SemanticError("la comparación relacional requiere enteros", node.token)
+                if not self._both_numeric(left_type, right_type):
+                    raise SemanticError("la comparación relacional requiere números", node.token)
                 return "bool"
             if node.op in ("==", "!="):
-                if left_type != right_type or left_type == "void":
+                compatible = left_type == right_type or self._both_numeric(left_type, right_type)
+                if not compatible or left_type == "void":
                     raise SemanticError("comparación entre tipos incompatibles", node.token)
                 return "bool"
             if node.op in ("&&", "||"):
@@ -148,7 +182,7 @@ class SemanticAnalyzer:
         elif isinstance(node, VarDecl):
             if node.valor is not None:
                 value_type = self.type_of(node.valor)
-                if value_type != node.tipo:
+                if not self._compatible(node.tipo, value_type):
                     raise SemanticError(
                         f"no se puede asignar '{value_type}' a '{node.nombre}' de tipo '{node.tipo}'", node.token
                     )
@@ -164,7 +198,7 @@ class SemanticAnalyzer:
             if symbol.is_array:
                 raise SemanticError(f"'{node.nombre}' es un arreglo y no puede asignarse directamente", node.token)
             value_type = self.type_of(node.valor)
-            if symbol.tipo != value_type:
+            if not self._compatible(symbol.tipo, value_type):
                 raise SemanticError(
                     f"no se puede asignar '{value_type}' a '{node.nombre}' de tipo '{symbol.tipo}'", node.token
                 )
@@ -172,7 +206,7 @@ class SemanticAnalyzer:
             symbol = self._array_symbol(node.nombre, node.token)
             self._check_index(node.index, symbol, node.token)
             value_type = self.type_of(node.valor)
-            if symbol.tipo != value_type:
+            if not self._compatible(symbol.tipo, value_type):
                 raise SemanticError(
                     f"no se puede asignar '{value_type}' a elementos '{symbol.tipo}' de '{node.nombre}'", node.token
                 )
@@ -187,6 +221,22 @@ class SemanticAnalyzer:
                 self._visit_block(node.body)
             finally:
                 self.loop_depth -= 1
+        elif isinstance(node, ForStmt):
+            previous = self.env
+            self.env = Environment(previous)
+            try:
+                if node.init is not None:
+                    self.visit(node.init)
+                self._require_bool(node.cond, node.token)
+                self.loop_depth += 1
+                try:
+                    self._visit_block(node.body)
+                    if node.update is not None:
+                        self.visit(node.update)
+                finally:
+                    self.loop_depth -= 1
+            finally:
+                self.env = previous
         elif isinstance(node, ReturnStmt):
             self._visit_return(node)
         elif isinstance(node, (BreakStmt, ContinueStmt)):
@@ -200,6 +250,10 @@ class SemanticAnalyzer:
             if not isinstance(node.expr, CallExpr):
                 raise SemanticError("solo una llamada puede utilizarse como sentencia", node.token)
             self._check_call(node.expr)
+        elif isinstance(node, ImportStmt):
+            return
+        elif isinstance(node, BlockStmt):
+            self._visit_block(node.body)
         else:
             self.type_of(node)
 
@@ -234,7 +288,7 @@ class SemanticAnalyzer:
         if self.current_return_type == "void":
             raise SemanticError("una función void no puede retornar un valor", node.token)
         actual = self.type_of(node.expr)
-        if actual != self.current_return_type:
+        if not self._compatible(self.current_return_type, actual):
             raise SemanticError(
                 f"return incompatible: se esperaba '{self.current_return_type}' y se obtuvo '{actual}'", node.token
             )
@@ -249,7 +303,7 @@ class SemanticAnalyzer:
             )
         for index, (argument, expected) in enumerate(zip(node.args, signature.params), start=1):
             actual = self.type_of(argument)
-            if actual != expected:
+            if not self._compatible(expected, actual):
                 raise SemanticError(
                     f"argumento {index} de '{node.nombre}': se esperaba '{expected}', se obtuvo '{actual}'", node.token
                 )
@@ -273,6 +327,14 @@ class SemanticAnalyzer:
     def _require_bool(self, expression, token):
         if self.type_of(expression) != "bool":
             raise SemanticError("la condición debe ser booleana", token)
+
+    @staticmethod
+    def _compatible(expected, actual):
+        return expected == "any" or expected == actual or (expected == "float" and actual == "int")
+
+    @staticmethod
+    def _both_numeric(left, right):
+        return left in ("int", "float") and right in ("int", "float")
 
     def _visit_block(self, statements):
         previous = self.env

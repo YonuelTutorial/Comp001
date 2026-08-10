@@ -7,12 +7,15 @@ from .ast_nodes import (
     ArrayDecl,
     Assign,
     BinOp,
+    BlockStmt,
     BreakStmt,
     CallExpr,
     ContinueStmt,
     ExprStmt,
+    ForStmt,
     FuncDecl,
     IfStmt,
+    ImportStmt,
     Literal,
     Print,
     ReturnStmt,
@@ -103,7 +106,8 @@ class CodeGenerator:
         self.emit("FUNC", node.nombre, tuple(parameter.nombre for parameter in node.params), token=node.token)
         for statement in node.body:
             self.visit(statement)
-        self.emit("RETURN_VOID", token=node.token)
+        if node.tipo == "void":
+            self.emit("RETURN_VOID", token=node.token)
         self.emit("END_FUNC", node.nombre)
 
     def visit_VarDecl(self, node):
@@ -149,6 +153,31 @@ class CodeGenerator:
         self.emit("LABEL", end_label)
         self.loop_stack.pop()
 
+    def visit_ForStmt(self, node):
+        start_label = self.get_label("for")
+        update_label = self.get_label("for_update")
+        end_label = self.get_label("endfor")
+        self.emit("ENTER_SCOPE")
+        self.scope_depth += 1
+        if node.init is not None:
+            self.visit(node.init)
+        self.loop_stack.append((update_label, end_label, self.scope_depth))
+        self.emit("LABEL", start_label)
+        self.visit(node.cond)
+        self.emit("JUMP_IF_FALSE", end_label, token=node.token)
+        self._block(node.body)
+        self.emit("LABEL", update_label)
+        if node.update is not None:
+            self.visit(node.update)
+        self.emit("JUMP", start_label)
+        self.emit("LABEL", end_label)
+        self.loop_stack.pop()
+        self.scope_depth -= 1
+        self.emit("EXIT_SCOPE")
+
+    def visit_ImportStmt(self, node):
+        return
+
     def visit_ReturnStmt(self, node):
         if node.expr is None:
             self.emit("RETURN_VOID", token=node.token)
@@ -178,6 +207,9 @@ class CodeGenerator:
         self.visit(node.expr)
         self.emit("POP", token=node.token)
 
+    def visit_BlockStmt(self, node):
+        self._block(node.body)
+
     def visit_CallExpr(self, node):
         for argument in node.args:
             self.visit(argument)
@@ -200,6 +232,8 @@ class CodeGenerator:
             "-": "SUB",
             "*": "MUL",
             "/": "DIV",
+            "%": "MOD",
+            "^": "POW",
             "==": "EQ",
             "!=": "NE",
             "<": "LT",

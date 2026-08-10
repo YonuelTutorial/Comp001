@@ -8,8 +8,10 @@ from .ast_nodes import (
     CallExpr,
     ContinueStmt,
     ExprStmt,
+    ForStmt,
     FuncDecl,
     IfStmt,
+    ImportStmt,
     Literal,
     Param,
     Print,
@@ -26,6 +28,7 @@ TYPE_TOKENS = {
     "INT_T": "int",
     "BOOL_T": "bool",
     "STRING_T": "string",
+    "FLOAT_T": "float",
     "VOID_T": "void",
 }
 
@@ -66,6 +69,13 @@ class Parser:
         return ast
 
     def declaration(self, top_level=False):
+        if token := self.accept("IMPORT"):
+            if not top_level:
+                raise ParserError("import solo puede utilizarse en el nivel global", token)
+            path = self.match("STRING")
+            self.match("SEMI")
+            return ImportStmt(self.decode_string(path), token)
+
         if self.check(*TYPE_TOKENS):
             type_token = self.advance()
             tipo = TYPE_TOKENS[type_token.kind]
@@ -100,7 +110,7 @@ class Parser:
         if self.accept("RPAREN"):
             return params
         while True:
-            if not self.check("INT_T", "BOOL_T", "STRING_T"):
+            if not self.check("INT_T", "BOOL_T", "STRING_T", "FLOAT_T"):
                 raise ParserError("se esperaba un tipo de parámetro", self.current)
             type_token = self.advance()
             name_token = self.match("ID")
@@ -137,6 +147,25 @@ class Parser:
             self.match("RPAREN")
             return WhileStmt(cond, self.block(), token)
 
+        if token := self.accept("FOR"):
+            self.match("LPAREN")
+            if self.accept("SEMI"):
+                init = None
+            elif self.check("INT_T", "BOOL_T", "STRING_T", "FLOAT_T"):
+                init = self.declaration(top_level=False)
+            else:
+                init = self.assignment_or_expression()
+
+            if self.accept("SEMI"):
+                cond = Literal(True, "bool", token)
+            else:
+                cond = self.expression()
+                self.match("SEMI")
+
+            update = None if self.check("RPAREN") else self.assignment_or_expression(consume_semi=False)
+            self.match("RPAREN")
+            return ForStmt(init, cond, update, self.block(), token)
+
         if token := self.accept("RETURN"):
             expr = None if self.check("SEMI") else self.expression()
             self.match("SEMI")
@@ -153,19 +182,43 @@ class Parser:
         if self.check("LBRACE"):
             raise ParserError("un bloque aislado no es una sentencia válida", self.current)
 
-        start = self.current
-        expr = self.expression()
-        if self.accept("ASSIGN"):
-            value = self.expression()
-            self.match("SEMI")
-            if isinstance(expr, VarAccess):
-                return Assign(expr.nombre, value, start)
-            if isinstance(expr, ArrayAccess):
-                return ArrayAssign(expr.nombre, expr.index, value, start)
-            raise ParserError("el lado izquierdo de una asignación no es modificable", start)
+        return self.assignment_or_expression()
 
-        self.match("SEMI")
-        return ExprStmt(expr, start)
+    def assignment_or_expression(self, consume_semi=True):
+        start = self.current
+        target = self.expression()
+        operator = self.accept(
+            "ASSIGN", "PLUS_ASSIGN", "MINUS_ASSIGN", "STAR_ASSIGN", "SLASH_ASSIGN", "MOD_ASSIGN"
+        )
+        if operator:
+            value = self.expression()
+            if operator.kind != "ASSIGN":
+                binary_operator = {
+                    "PLUS_ASSIGN": "+",
+                    "MINUS_ASSIGN": "-",
+                    "STAR_ASSIGN": "*",
+                    "SLASH_ASSIGN": "/",
+                    "MOD_ASSIGN": "%",
+                }[operator.kind]
+                value = BinOp(target, binary_operator, value, operator)
+            statement = self._assignment(target, value, start)
+        elif increment := self.accept("PLUS_PLUS", "MINUS_MINUS"):
+            operator_value = "+" if increment.kind == "PLUS_PLUS" else "-"
+            value = BinOp(target, operator_value, Literal(1, "int", increment), increment)
+            statement = self._assignment(target, value, start)
+        else:
+            statement = ExprStmt(target, start)
+        if consume_semi:
+            self.match("SEMI")
+        return statement
+
+    @staticmethod
+    def _assignment(target, value, token):
+        if isinstance(target, VarAccess):
+            return Assign(target.nombre, value, token)
+        if isinstance(target, ArrayAccess):
+            return ArrayAssign(target.nombre, target.index, value, token)
+        raise ParserError("el lado izquierdo de una asignación no es modificable", token)
 
     def block(self):
         self.match("LBRACE")
@@ -212,19 +265,27 @@ class Parser:
 
     def factor(self):
         node = self.unary()
-        while token := self.accept("STAR", "SLASH"):
+        while token := self.accept("STAR", "SLASH", "MOD"):
             node = BinOp(node, token.value, self.unary(), token)
         return node
 
     def unary(self):
         if token := self.accept("MINUS", "NOT"):
             return UnaryOp(token.value, self.unary(), token)
-        return self.primary()
+        return self.power()
+
+    def power(self):
+        node = self.primary()
+        if token := self.accept("POW"):
+            node = BinOp(node, token.value, self.unary(), token)
+        return node
 
     def primary(self):
         token = self.current
         if self.accept("NUM"):
             return Literal(int(token.value), "int", token)
+        if self.accept("FLOAT"):
+            return Literal(float(token.value), "float", token)
         if self.accept("TRUE"):
             return Literal(True, "bool", token)
         if self.accept("FALSE"):

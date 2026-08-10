@@ -156,7 +156,7 @@ class RuntimeAndOptimizationTests(unittest.TestCase):
 
     def test_dynamic_division_by_zero(self):
         with self.assertRaisesRegex(MiniLangRuntimeError, "división por cero"):
-            run("int cero = 0; print(1 / cero);")
+            run("int cero = inputInt(); print(1 / cero);", input_provider=lambda prompt: "0")
 
     def test_instruction_limit(self):
         with self.assertRaisesRegex(MiniLangRuntimeError, "posible ciclo infinito"):

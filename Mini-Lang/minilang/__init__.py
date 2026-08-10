@@ -1,6 +1,8 @@
 from .ast_nodes import *
+from .ast_printer import format_ast
 from .codegen import BytecodeProgram, CodeGenerator, Instruction
 from .compiler import CompilationResult, Compiler
+from .debugger import Debugger
 from .errors import (
     CodeGenerationError,
     LexerError,
