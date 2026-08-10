@@ -20,6 +20,9 @@ class GuiHelpersTests(unittest.TestCase):
         for command in ("open_file", "save_file", "run_code", "start_debug", "find_text"):
             self.assertTrue(callable(getattr(app.MainApp, command)))
 
+    def test_javascript_panel_is_configured(self):
+        self.assertIn("JavaScript", app.MainApp.PANEL_NAMES)
+
 
 if __name__ == "__main__":
     unittest.main()

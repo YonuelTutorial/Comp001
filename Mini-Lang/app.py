@@ -140,6 +140,11 @@ class CodeEditor(ttk.Frame):
 
 
 class MainApp:
+    PANEL_NAMES = (
+        "Salida", "Errores", "Tokens", "AST", "Símbolos", "Pseudoensamblador",
+        "JavaScript", "Depuración", "Entrada",
+    )
+
     def __init__(self, root):
         self.root = root
         self.current_file = None
@@ -182,7 +187,7 @@ class MainApp:
         panes.add(self.notebook, weight=2)
         self.panels = {}
         self.panel_frames = {}
-        for name in ("Salida", "Errores", "Tokens", "AST", "Símbolos", "Pseudoensamblador", "Depuración", "Entrada"):
+        for name in self.PANEL_NAMES:
             frame = ttk.Frame(self.notebook)
             text = self._text_area(frame)
             self.notebook.add(frame, text=name)
@@ -300,6 +305,7 @@ class MainApp:
             + result.assembly
         )
         self._set_panel("Pseudoensamblador", bytecode)
+        self._set_panel("JavaScript", result.javascript)
 
     def _show_debug(self, state):
         self._set_panel("Salida", "\n".join(state["output"]))

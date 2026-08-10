@@ -4,6 +4,7 @@ from pathlib import Path
 
 from .codegen import CodeGenerator
 from .interpreter import Interpreter
+from .js_codegen import JavaScriptGenerator
 from .lexer import Lexer
 from .optimizer import Optimizer
 from .parser import Parser
@@ -22,6 +23,7 @@ class CompilationResult:
     bytecode: object
     symbols: dict
     unoptimized_assembly: str
+    javascript: str = ""
 
 
 class Compiler:
@@ -49,8 +51,16 @@ class Compiler:
         generator = CodeGenerator()
         bytecode = generator.build(optimized)
         assembly = bytecode.render()
+        javascript = JavaScriptGenerator(self.max_steps, self.max_call_depth).generate(optimized)
         return CompilationResult(
-            tokens, optimized, "", assembly, bytecode, analyzer.symbol_table(), unoptimized_assembly
+            tokens=tokens,
+            ast=optimized,
+            output="",
+            assembly=assembly,
+            bytecode=bytecode,
+            symbols=analyzer.symbol_table(),
+            unoptimized_assembly=unoptimized_assembly,
+            javascript=javascript,
         )
 
     def _resolve_imports(self, ast, base_dir, loaded, stack):

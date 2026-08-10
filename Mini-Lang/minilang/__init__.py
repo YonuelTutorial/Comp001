@@ -13,6 +13,7 @@ from .errors import (
     SemanticError,
 )
 from .interpreter import InterpEnv, Interpreter, ReturnException
+from .js_codegen import JavaScriptGenerator
 from .lexer import KEYWORDS, TOKEN_REGEX, Lexer
 from .optimizer import Optimizer
 from .parser import Parser
