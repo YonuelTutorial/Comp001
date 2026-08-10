@@ -13,6 +13,7 @@ TOKEN_REGEX = [
     ('RETURN', r'return'),
     ('TRUE', r'true'),
     ('FALSE', r'false'),
+    ('STRING', r'"[^"]*"|\'[^\']*\''),
     ('EQ', r'=='),
     ('ASSIGN', r'='),
     ('LT', r'<'),
@@ -267,6 +268,9 @@ class Parser:
         elif tok[0] == 'FALSE':
             self.match('FALSE')
             return Literal(False, 'bool')
+        elif tok[0] == 'STRING':
+            valor = self.match('STRING')[1]
+            return Literal(valor[1:-1], 'string')
         elif tok[0] == 'ID':
             nombre = self.match('ID')[1]
             if self.pos < len(self.tokens) and self.tokens[self.pos][0] == 'LPAREN':
@@ -573,6 +577,8 @@ class CodeGenerator:
     def visit_Literal(self, nodo):
         if nodo.tipo == 'bool':
             return "1" if nodo.val else "0"
+        if nodo.tipo == 'string':
+            return f'"{nodo.val}"'
         return str(nodo.val)
 
     def visit_VarAccess(self, nodo):
