@@ -10,6 +10,7 @@ from .ast_nodes import (
     BlockStmt,
     BreakStmt,
     CallExpr,
+    CastExpr,
     ContinueStmt,
     ExprStmt,
     ForStmt,
@@ -246,6 +247,13 @@ class CodeGenerator:
     def visit_UnaryOp(self, node):
         self.visit(node.expr)
         self.emit("NEG" if node.op == "-" else "NOT", token=node.token)
+
+    def visit_CastExpr(self, node):
+        self.visit(node.expr)
+        if node.tipo == "float":
+            self.emit("TO_FLOAT", token=node.token)
+            return
+        raise CodeGenerationError(f"conversión interna desconocida a '{node.tipo}'", node.token)
 
     def visit_Literal(self, node):
         self.emit("PUSH_CONST", node.val, token=node.token)

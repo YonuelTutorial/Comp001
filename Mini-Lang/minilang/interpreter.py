@@ -7,6 +7,7 @@ from .ast_nodes import (
     BlockStmt,
     BreakStmt,
     CallExpr,
+    CastExpr,
     ContinueStmt,
     ExprStmt,
     ForStmt,
@@ -159,6 +160,11 @@ class Interpreter:
         elif isinstance(node, UnaryOp):
             value = self.visit(node.expr)
             return -value if node.op == "-" else not value
+        elif isinstance(node, CastExpr):
+            value = self.visit(node.expr)
+            if node.tipo == "float":
+                return float(value)
+            raise MiniLangRuntimeError(f"conversión interna desconocida a '{node.tipo}'", node.token)
         elif isinstance(node, Literal):
             return node.val
         elif isinstance(node, VarAccess):

@@ -4,7 +4,7 @@ __pycache__/
 .coverage
 htmlcov/
 build/
-docs/
+docs/*
 dist/
 tmp_*.py
 .pyinstaller-build*/

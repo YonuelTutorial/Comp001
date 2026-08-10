@@ -9,6 +9,7 @@ from .ast_nodes import (
     BlockStmt,
     BreakStmt,
     CallExpr,
+    CastExpr,
     ContinueStmt,
     ExprStmt,
     ForStmt,
@@ -142,6 +143,11 @@ class SemanticAnalyzer:
                 return "bool"
             expected = "un número" if node.op == "-" else "bool"
             raise SemanticError(f"el operador '{node.op}' requiere {expected}", node.token)
+        if isinstance(node, CastExpr):
+            expr_type = self.type_of(node.expr)
+            if node.tipo == "float" and expr_type in ("int", "float"):
+                return "float"
+            raise SemanticError(f"conversión interna inválida de '{expr_type}' a '{node.tipo}'", node.token)
         if isinstance(node, BinOp):
             left_type = self.type_of(node.izq)
             right_type = self.type_of(node.der)
@@ -186,6 +192,7 @@ class SemanticAnalyzer:
                     raise SemanticError(
                         f"no se puede asignar '{value_type}' a '{node.nombre}' de tipo '{node.tipo}'", node.token
                     )
+                node.valor = self._promote(node.valor, node.tipo, value_type)
             if not predeclared:
                 self.env.declare(node.nombre, node.tipo, node.token)
         elif isinstance(node, ArrayDecl):
@@ -202,6 +209,7 @@ class SemanticAnalyzer:
                 raise SemanticError(
                     f"no se puede asignar '{value_type}' a '{node.nombre}' de tipo '{symbol.tipo}'", node.token
                 )
+            node.valor = self._promote(node.valor, symbol.tipo, value_type)
         elif isinstance(node, ArrayAssign):
             symbol = self._array_symbol(node.nombre, node.token)
             self._check_index(node.index, symbol, node.token)
@@ -210,6 +218,7 @@ class SemanticAnalyzer:
                 raise SemanticError(
                     f"no se puede asignar '{value_type}' a elementos '{symbol.tipo}' de '{node.nombre}'", node.token
                 )
+            node.valor = self._promote(node.valor, symbol.tipo, value_type)
         elif isinstance(node, IfStmt):
             self._require_bool(node.cond, node.token)
             self._visit_block(node.body)
@@ -292,6 +301,7 @@ class SemanticAnalyzer:
             raise SemanticError(
                 f"return incompatible: se esperaba '{self.current_return_type}' y se obtuvo '{actual}'", node.token
             )
+        node.expr = self._promote(node.expr, self.current_return_type, actual)
 
     def _check_call(self, node):
         if node.nombre not in self.funcs:
@@ -307,6 +317,7 @@ class SemanticAnalyzer:
                 raise SemanticError(
                     f"argumento {index} de '{node.nombre}': se esperaba '{expected}', se obtuvo '{actual}'", node.token
                 )
+            node.args[index - 1] = self._promote(argument, expected, actual)
         return signature.return_type
 
     def _array_symbol(self, name, token):
@@ -331,6 +342,12 @@ class SemanticAnalyzer:
     @staticmethod
     def _compatible(expected, actual):
         return expected == "any" or expected == actual or (expected == "float" and actual == "int")
+
+    @staticmethod
+    def _promote(expression, expected, actual):
+        if expected == "float" and actual == "int":
+            return CastExpr(expression, "float", getattr(expression, "token", None))
+        return expression
 
     @staticmethod
     def _both_numeric(left, right):

@@ -151,6 +151,8 @@ class VirtualMachine:
         elif op in ("NEG", "NOT"):
             value = self._pop(token)
             self.stack.append(-value if op == "NEG" else not value)
+        elif op == "TO_FLOAT":
+            self.stack.append(float(self._pop(token)))
         elif op in ("ADD", "SUB", "MUL", "DIV", "MOD", "POW", "EQ", "NE", "LT", "LE", "GT", "GE"):
             right = self._pop(token)
             left = self._pop(token)

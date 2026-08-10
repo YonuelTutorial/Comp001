@@ -6,6 +6,7 @@ from .ast_nodes import (
     BlockStmt,
     BreakStmt,
     CallExpr,
+    CastExpr,
     ContinueStmt,
     ExprStmt,
     ForStmt,
@@ -66,11 +67,15 @@ class Optimizer:
             node.args = [self.visit(argument) for argument in node.args]
         elif isinstance(node, ArrayAccess):
             node.index = self.visit(node.index)
+        elif isinstance(node, CastExpr):
+            node.expr = self.visit(node.expr)
+            if isinstance(node.expr, Literal) and node.tipo == "float":
+                return Literal(float(node.expr.val), "float", node.token)
         elif isinstance(node, UnaryOp):
             node.expr = self.visit(node.expr)
             if isinstance(node.expr, Literal):
                 value = -node.expr.val if node.op == "-" else not node.expr.val
-                tipo = "int" if node.op == "-" else "bool"
+                tipo = node.expr.tipo if node.op == "-" else "bool"
                 return Literal(value, tipo, node.token)
         elif isinstance(node, BinOp):
             node.izq = self.visit(node.izq)
@@ -137,6 +142,8 @@ class Optimizer:
             node.izq = self._substitute(node.izq, constants)
             node.der = self._substitute(node.der, constants)
         elif isinstance(node, UnaryOp):
+            node.expr = self._substitute(node.expr, constants)
+        elif isinstance(node, CastExpr):
             node.expr = self._substitute(node.expr, constants)
         elif isinstance(node, CallExpr):
             node.args = [self._substitute(argument, constants) for argument in node.args]

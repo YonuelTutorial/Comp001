@@ -150,6 +150,13 @@ class UnaryOp:
 
 
 @dataclass
+class CastExpr:
+    expr: object
+    tipo: str
+    token: Optional[Token] = None
+
+
+@dataclass
 class Literal:
     val: object
     tipo: str
