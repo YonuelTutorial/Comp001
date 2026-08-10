@@ -1,5 +1,6 @@
 import json
 import re
+import stat
 import sys
 import tkinter as tk
 from pathlib import Path
@@ -140,6 +141,7 @@ class CodeEditor(ttk.Frame):
 
 
 class MainApp:
+    EXPLORER_IGNORED = frozenset({".git", "__pycache__", ".pytest_cache"})
     PANEL_NAMES = (
         "Salida", "Errores", "Tokens", "AST", "Símbolos", "Pseudoensamblador",
         "JavaScript", "Depuración", "Entrada",
@@ -148,11 +150,16 @@ class MainApp:
     def __init__(self, root):
         self.root = root
         self.current_file = None
+        self.project_dir = None
         self.dirty = False
         self.input_values = []
         self.last_result = None
         self.debugger = None
         self.status = tk.StringVar(value="Línea 1, columna 1")
+        self.project_name = tk.StringVar(value="Sin carpeta abierta")
+        self.explorer_paths = {}
+        self.explorer_loaded = set()
+        self.explorer_visible = True
         self.root.geometry("1100x820")
         self.root.minsize(850, 650)
         icon = Path(getattr(sys, "_MEIPASS", Path(__file__).parent)) / "assets" / "minilang.ico"
@@ -168,7 +175,8 @@ class MainApp:
         toolbar = ttk.Frame(self.root, padding=(6, 4))
         toolbar.pack(fill=tk.X)
         for text, command in (
-            ("Ejecutar", self.run_code),
+            ("Ejecutar F5", self.run_code),
+            ("Compilar F7", self.build_code),
             ("Depurar", self.start_debug),
             ("Paso", self.debug_step),
             ("Continuar", self.debug_continue),
@@ -178,13 +186,15 @@ class MainApp:
         ):
             ttk.Button(toolbar, text=text, command=command).pack(side=tk.LEFT, padx=2)
 
-        panes = ttk.PanedWindow(self.root, orient=tk.VERTICAL)
-        panes.pack(fill=tk.BOTH, expand=True, padx=6)
-        self.editor = CodeEditor(panes, self.mark_dirty, self.update_cursor)
-        panes.add(self.editor, weight=3)
+        self.workspace = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
+        self.workspace.pack(fill=tk.BOTH, expand=True, padx=6)
+        self.main_panes = ttk.PanedWindow(self.workspace, orient=tk.VERTICAL)
+        self.workspace.add(self.main_panes, weight=4)
+        self.editor = CodeEditor(self.main_panes, self.mark_dirty, self.update_cursor)
+        self.main_panes.add(self.editor, weight=3)
 
-        self.notebook = ttk.Notebook(panes)
-        panes.add(self.notebook, weight=2)
+        self.notebook = ttk.Notebook(self.main_panes)
+        self.main_panes.add(self.notebook, weight=2)
         self.panels = {}
         self.panel_frames = {}
         for name in self.PANEL_NAMES:
@@ -194,6 +204,8 @@ class MainApp:
             self.panels[name] = text
             self.panel_frames[name] = frame
         self.panels["Entrada"].insert("1.0", "")
+        self._setup_explorer()
+        self.workspace.add(self.explorer_frame, weight=1)
         ttk.Label(self.root, textvariable=self.status, anchor=tk.W).pack(fill=tk.X, padx=8, pady=3)
 
     def _menu(self):
@@ -201,6 +213,7 @@ class MainApp:
         file_menu = tk.Menu(menu, tearoff=False)
         file_menu.add_command(label="Nuevo", accelerator="Ctrl+N", command=self.new_file)
         file_menu.add_command(label="Abrir", accelerator="Ctrl+O", command=self.open_file)
+        file_menu.add_command(label="Abrir carpeta...", command=self.open_folder)
         file_menu.add_command(label="Guardar", accelerator="Ctrl+S", command=self.save_file)
         file_menu.add_command(label="Guardar como", accelerator="Ctrl+Shift+S", command=self.save_as)
         file_menu.add_separator()
@@ -208,6 +221,8 @@ class MainApp:
         menu.add_cascade(label="Archivo", menu=file_menu)
 
         compile_menu = tk.Menu(menu, tearoff=False)
+        compile_menu.add_command(label="Compilar", accelerator="F7", command=self.build_code)
+        compile_menu.add_separator()
         compile_menu.add_command(
             label="Compilar a pseudoensamblador...", command=self.compile_assembly
         )
@@ -223,6 +238,10 @@ class MainApp:
         edit_menu.add_command(label="Aumentar fuente", accelerator="Ctrl++", command=self.increase_font)
         edit_menu.add_command(label="Reducir fuente", accelerator="Ctrl+-", command=self.decrease_font)
         menu.add_cascade(label="Editar", menu=edit_menu)
+
+        view_menu = tk.Menu(menu, tearoff=False)
+        view_menu.add_command(label="Mostrar/Ocultar explorador", command=self.toggle_explorer)
+        menu.add_cascade(label="Ver", menu=view_menu)
         self.root.configure(menu=menu)
         self.root.bind("<Control-n>", lambda event: self.new_file())
         self.root.bind("<Control-o>", lambda event: self.open_file())
@@ -232,6 +251,8 @@ class MainApp:
         self.root.bind("<Control-h>", lambda event: self.replace_text())
         self.root.bind("<Control-plus>", lambda event: self.increase_font())
         self.root.bind("<Control-minus>", lambda event: self.decrease_font())
+        self.root.bind("<F5>", lambda event: self.run_code())
+        self.root.bind("<F7>", lambda event: self.build_code())
 
     @staticmethod
     def _text_area(parent):
@@ -246,6 +267,157 @@ class MainApp:
         parent.columnconfigure(0, weight=1)
         return text
 
+    def _setup_explorer(self):
+        self.explorer_frame = ttk.Frame(self.workspace, padding=(6, 4))
+        header = ttk.Frame(self.explorer_frame)
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 5))
+        ttk.Label(header, text="EXPLORADOR").pack(side=tk.LEFT)
+        ttk.Button(header, text="Carpeta...", command=self.open_folder).pack(side=tk.RIGHT, padx=2)
+        ttk.Button(header, text="Ocultar", command=self.toggle_explorer).pack(side=tk.RIGHT)
+        ttk.Label(
+            self.explorer_frame, textvariable=self.project_name, anchor=tk.W
+        ).grid(row=1, column=0, sticky="ew", pady=(0, 4))
+
+        tree_frame = ttk.Frame(self.explorer_frame)
+        tree_frame.grid(row=2, column=0, sticky="nsew")
+        self.explorer = ttk.Treeview(tree_frame, show="tree", selectmode="browse")
+        self.explorer.column("#0", width=240, minwidth=160, stretch=True)
+        vertical = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=self.explorer.yview)
+        horizontal = ttk.Scrollbar(tree_frame, orient=tk.HORIZONTAL, command=self.explorer.xview)
+        self.explorer.configure(yscrollcommand=vertical.set, xscrollcommand=horizontal.set)
+        self.explorer.grid(row=0, column=0, sticky="nsew")
+        vertical.grid(row=0, column=1, sticky="ns")
+        horizontal.grid(row=1, column=0, sticky="ew")
+        tree_frame.rowconfigure(0, weight=1)
+        tree_frame.columnconfigure(0, weight=1)
+        self.explorer_frame.rowconfigure(2, weight=1)
+        self.explorer_frame.columnconfigure(0, weight=1)
+        self.explorer.bind("<<TreeviewOpen>>", self._on_explorer_open)
+        self.explorer.bind("<Double-1>", self._activate_explorer_item)
+        self.explorer.bind("<Return>", self._activate_explorer_item)
+        self.explorer.insert("", tk.END, text="Abre una carpeta para explorar", tags=("placeholder",))
+
+    def open_folder(self):
+        initial = self.project_dir or (self.current_file.parent if self.current_file else Path.cwd())
+        path = filedialog.askdirectory(parent=self.root, initialdir=str(initial), mustexist=True)
+        if not path:
+            return False
+        try:
+            self.set_project_folder(path)
+            return True
+        except OSError as error:
+            messagebox.showerror("Abrir carpeta", str(error), parent=self.root)
+            return False
+
+    def set_project_folder(self, path):
+        folder = Path(path).resolve()
+        if not folder.is_dir():
+            raise OSError(f"La carpeta no existe: {folder}")
+        self.project_dir = folder
+        self.project_name.set(folder.name or str(folder))
+        self.refresh_explorer()
+        self.set_explorer_visible(True)
+        self.status.set(f"Proyecto abierto: {folder}")
+
+    def refresh_explorer(self):
+        self.explorer.delete(*self.explorer.get_children(""))
+        self.explorer_paths.clear()
+        self.explorer_loaded.clear()
+        if self.project_dir is None:
+            self.explorer.insert(
+                "", tk.END, text="Abre una carpeta para explorar", tags=("placeholder",)
+            )
+            return
+        root_item = self.explorer.insert(
+            "", tk.END, text=self.project_dir.name or str(self.project_dir), open=True
+        )
+        self.explorer_paths[root_item] = self.project_dir
+        self._load_explorer_node(root_item)
+
+    @classmethod
+    def project_entries(cls, folder):
+        entries = []
+        for entry in Path(folder).iterdir():
+            if entry.name in cls.EXPLORER_IGNORED or cls._is_reparse_point(entry):
+                continue
+            try:
+                directory = entry.is_dir()
+            except OSError:
+                directory = False
+            entries.append((directory, entry))
+        entries.sort(key=lambda item: (not item[0], item[1].name.casefold(), item[1].name))
+        return [entry for _directory, entry in entries]
+
+    @staticmethod
+    def _is_reparse_point(path):
+        try:
+            attributes = getattr(path.lstat(), "st_file_attributes", 0)
+            flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+            return path.is_symlink() or bool(attributes & flag)
+        except OSError:
+            return True
+
+    def _load_explorer_node(self, item):
+        if item in self.explorer_loaded:
+            return
+        folder = self.explorer_paths.get(item)
+        if folder is None or not folder.is_dir():
+            return
+        for child in self.explorer.get_children(item):
+            self.explorer.delete(child)
+        try:
+            entries = self.project_entries(folder)
+        except OSError as error:
+            self.explorer.insert(item, tk.END, text="[No se pudo leer la carpeta]")
+            self.status.set(f"No se pudo explorar {folder}: {error}")
+            self.explorer_loaded.add(item)
+            return
+        for entry in entries:
+            child = self.explorer.insert(item, tk.END, text=entry.name)
+            self.explorer_paths[child] = entry
+            try:
+                directory = entry.is_dir()
+            except OSError:
+                directory = False
+            if directory:
+                self.explorer.insert(child, tk.END, text="")
+        self.explorer_loaded.add(item)
+
+    def _on_explorer_open(self, _event=None):
+        item = self.explorer.focus()
+        if item:
+            self.root.after_idle(lambda selected=item: self._load_explorer_node(selected))
+
+    def _activate_explorer_item(self, event=None):
+        mouse_event = event is not None and getattr(event, "num", None) == 1
+        item = self.explorer.identify_row(event.y) if mouse_event else ""
+        item = item or self.explorer.focus()
+        path = self.explorer_paths.get(item)
+        if path is None:
+            return "break"
+        self.explorer.selection_set(item)
+        self.explorer.focus(item)
+        if path.is_dir():
+            opened = not bool(self.explorer.item(item, "open"))
+            self.explorer.item(item, open=opened)
+            if opened:
+                self._load_explorer_node(item)
+            return "break"
+        self._open_editor_file(path)
+        return "break"
+
+    def toggle_explorer(self):
+        self.set_explorer_visible(not self.explorer_visible)
+
+    def set_explorer_visible(self, visible):
+        pane_names = {str(pane) for pane in self.workspace.panes()}
+        present = str(self.explorer_frame) in pane_names
+        if visible and not present:
+            self.workspace.add(self.explorer_frame, weight=1)
+        elif not visible and present:
+            self.workspace.forget(self.explorer_frame)
+        self.explorer_visible = visible
+
     def run_code(self):
         self._prepare_inputs()
         try:
@@ -254,8 +426,27 @@ class MainApp:
             self._show_result(self.last_result)
             self._set_panel("Errores", "")
             self.notebook.select(self.panels["Salida"].master)
+            self.status.set("Ejecución completada")
+            return True
         except Exception as error:
             self._show_error(error)
+            self.status.set("Ejecución fallida")
+            return False
+
+    def build_code(self):
+        try:
+            self.last_result = Compiler(
+                max_steps=1_000_000, max_call_depth=500
+            ).compile(self.editor.get(), self.current_file)
+            self._show_result(self.last_result)
+            self._set_panel("Errores", "")
+            self.notebook.select(self.panels["Pseudoensamblador"].master)
+            self.status.set("Compilación completada")
+            return True
+        except Exception as error:
+            self._show_error(error)
+            self.status.set("Compilación fallida")
+            return False
 
     def compile_assembly(self):
         return self._export_compilation(
@@ -413,20 +604,35 @@ class MainApp:
         self.update_title()
 
     def open_file(self):
-        if not self._confirm_discard():
-            return
         path = filedialog.askopenfilename(
             parent=self.root, filetypes=(("Mini-Lang", "*.mini *.txt"), ("Todos", "*.*"))
         )
         if not path:
-            return
+            return False
+        return self._open_editor_file(path)
+
+    def _open_editor_file(self, path):
+        path = Path(path).resolve()
         try:
-            self.editor.set(Path(path).read_text(encoding="utf-8"))
-            self.current_file = Path(path)
-            self.dirty = False
-            self.update_title()
+            source = path.read_text(encoding="utf-8")
+        except UnicodeError:
+            messagebox.showerror(
+                "Abrir", f"El archivo no contiene texto UTF-8: {path}", parent=self.root
+            )
+            return False
         except OSError as error:
             messagebox.showerror("Abrir", str(error), parent=self.root)
+            return False
+        if not self._confirm_discard():
+            return False
+        self.editor.set(source)
+        self.current_file = path
+        self.dirty = False
+        self.update_title()
+        if self.project_dir is None:
+            self.set_project_folder(path.parent)
+        self.status.set(f"Archivo abierto: {path}")
+        return True
 
     def save_file(self):
         if self.current_file is None:
@@ -448,7 +654,22 @@ class MainApp:
         if not path:
             return False
         self.current_file = Path(path)
-        return self.save_file()
+        saved = self.save_file()
+        if saved:
+            if self.project_dir is None:
+                self.set_project_folder(self.current_file.parent)
+            elif self._path_in_project(self.current_file):
+                self.refresh_explorer()
+        return saved
+
+    def _path_in_project(self, path):
+        if self.project_dir is None:
+            return False
+        try:
+            Path(path).resolve().relative_to(self.project_dir)
+            return True
+        except ValueError:
+            return False
 
     def find_text(self):
         query = simpledialog.askstring("Buscar", "Texto:", parent=self.root)

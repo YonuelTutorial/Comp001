@@ -3,6 +3,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import app
@@ -23,8 +24,9 @@ class GuiHelpersTests(unittest.TestCase):
 
     def test_main_app_commands_exist(self):
         for command in (
-            "open_file", "save_file", "run_code", "compile_assembly",
-            "compile_javascript", "start_debug", "find_text",
+            "open_file", "save_file", "run_code", "build_code", "compile_assembly",
+            "compile_javascript", "open_folder", "toggle_explorer",
+            "start_debug", "find_text",
         ):
             self.assertTrue(callable(getattr(app.MainApp, command)))
 
@@ -54,11 +56,22 @@ class GuiHelpersTests(unittest.TestCase):
         with patch("app.tk.Menu", FakeMenu):
             fake._menu()
         self.assertEqual([item["label"] for item in menus[0].cascades], [
-            "Archivo", "Compilar", "Editar",
+            "Archivo", "Compilar", "Editar", "Ver",
         ])
+        self.assertIn("Abrir carpeta...", [item["label"] for item in menus[1].commands])
         self.assertEqual([item["label"] for item in menus[2].commands], [
-            "Compilar a pseudoensamblador...", "Compilar a JavaScript...",
+            "Compilar", "Compilar a pseudoensamblador...", "Compilar a JavaScript...",
         ])
+        self.assertEqual(menus[2].commands[0]["accelerator"], "F7")
+        bindings = {call.args[0]: call.args[1] for call in fake.root.bind.call_args_list}
+        self.assertIn("<F5>", bindings)
+        self.assertIn("<F7>", bindings)
+        fake.run_code = Mock()
+        fake.build_code = Mock()
+        bindings["<F5>"](None)
+        bindings["<F7>"](None)
+        fake.run_code.assert_called_once_with()
+        fake.build_code.assert_called_once_with()
 
     @staticmethod
     def _fake_app(source, current_file=None):
@@ -72,7 +85,31 @@ class GuiHelpersTests(unittest.TestCase):
         fake._show_result = Mock()
         fake._set_panel = Mock()
         fake._show_error = Mock()
+        fake.notebook = Mock()
+        fake.panels = {
+            "Pseudoensamblador": SimpleNamespace(master=object()),
+            "Salida": SimpleNamespace(master=object()),
+        }
         return fake
+
+    def test_f7_builds_without_execution_or_input(self):
+        fake = self._fake_app("print(inputInt());")
+        with patch.object(app.Compiler, "compile_and_run") as compile_and_run:
+            self.assertTrue(fake.build_code())
+        compile_and_run.assert_not_called()
+        self.assertEqual(fake.last_result.output, "")
+        fake._show_result.assert_called_once_with(fake.last_result)
+        fake._set_panel.assert_called_once_with("Errores", "")
+        fake.notebook.select.assert_called_once_with(fake.panels["Pseudoensamblador"].master)
+        fake.status.set.assert_called_once_with("Compilación completada")
+
+    def test_f7_reports_compilation_errors(self):
+        fake = self._fake_app("int valor = ;")
+        self.assertFalse(fake.build_code())
+        self.assertIsNone(fake.last_result)
+        fake._show_result.assert_not_called()
+        fake._show_error.assert_called_once()
+        fake.status.set.assert_called_once_with("Compilación fallida")
 
     def test_compile_assembly_writes_the_optimized_output(self):
         with tempfile.TemporaryDirectory() as directory:
