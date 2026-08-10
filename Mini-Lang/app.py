@@ -712,7 +712,7 @@ class MainApp:
     def update_title(self):
         name = self.current_file.name if self.current_file else "Sin título"
         marker = "*" if self.dirty else ""
-        self.root.title(f"{marker}{name} — Mini-Lang v4.1")
+        self.root.title(f"{marker}{name} — Mini-Lang v4.3")
 
     def _confirm_discard(self):
         if not self.dirty:
