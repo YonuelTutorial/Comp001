@@ -8,7 +8,7 @@ Esta fase permitirá navegar y abrir archivos. No incluirá crear, renombrar, mo
 
 ## Base
 
-- Versión de referencia: Mini-Lang v4.2.3 con PLAN6.
+- Versión de referencia: Mini-Lang v4.2.9 con PLAN6.
 - Suite inicial: 120 pruebas aprobadas.
 - El editor actual trabaja con un archivo abierto y conserva confirmación de cambios sin guardar.
 - El proyecto no tiene todavía un concepto persistente de carpeta de trabajo.
@@ -67,41 +67,41 @@ El explorador tendrá:
 
 ### Fase 1 — Estructura visual
 
-- [ ] Dividir horizontalmente el espacio de trabajo.
-- [ ] Mantener editor, paneles y estado actuales.
-- [ ] Crear el panel derecho con cabecera y árbol.
-- [ ] Permitir ocultar y volver a mostrar el explorador.
+- [x] Dividir horizontalmente el espacio de trabajo.
+- [x] Mantener editor, paneles y estado actuales.
+- [x] Crear el panel derecho con cabecera y árbol.
+- [x] Permitir ocultar y volver a mostrar el explorador.
 
 ### Fase 2 — Modelo del árbol
 
-- [ ] Enumerar carpetas antes que archivos.
-- [ ] Excluir carpetas internas conocidas.
-- [ ] Cargar subcarpetas bajo demanda.
-- [ ] Evitar atravesar puntos de reanálisis.
-- [ ] Manejar carpetas sin permisos sin cerrar el IDE.
+- [x] Enumerar carpetas antes que archivos.
+- [x] Excluir carpetas internas conocidas.
+- [x] Cargar subcarpetas bajo demanda.
+- [x] Evitar atravesar puntos de reanálisis.
+- [x] Manejar carpetas sin permisos sin cerrar el IDE.
 
 ### Fase 3 — Integración de archivos
 
-- [ ] Añadir `Archivo > Abrir carpeta...`.
-- [ ] Abrir archivos con doble clic o Enter.
-- [ ] Conservar el flujo de cambios sin guardar.
-- [ ] Actualizar título, archivo actual y estado.
-- [ ] Adoptar la carpeta del primer archivo abierto cuando no hay proyecto.
+- [x] Añadir `Archivo > Abrir carpeta...`.
+- [x] Abrir archivos con doble clic o Enter.
+- [x] Conservar el flujo de cambios sin guardar.
+- [x] Actualizar título, archivo actual y estado.
+- [x] Adoptar la carpeta del primer archivo abierto cuando no hay proyecto.
 
 ### Fase 4 — Pruebas
 
-- [ ] Validar orden y exclusiones del árbol.
-- [ ] Validar carga de carpeta y nodos bajo demanda.
-- [ ] Validar apertura y rechazo de archivos no UTF-8.
-- [ ] Validar los comandos nuevos del menú.
-- [ ] Confirmar que PLAN6 continúa funcionando.
+- [x] Validar orden y exclusiones del árbol.
+- [x] Validar carga de carpeta y nodos bajo demanda.
+- [x] Validar apertura y rechazo de archivos no UTF-8.
+- [x] Validar los comandos nuevos del menú.
+- [x] Confirmar que PLAN6 continúa funcionando.
 
 ### Fase 5 — Verificación
 
-- [ ] Ejecutar toda la suite.
-- [ ] Ejecutar la autoprueba del código fuente.
-- [ ] Validar sintaxis Python y diff.
-- [ ] Confirmar que no se generaron ejecutables.
+- [x] Ejecutar toda la suite.
+- [x] Ejecutar la autoprueba del código fuente.
+- [x] Validar sintaxis Python y diff.
+- [x] Confirmar que no se generaron ejecutables.
 
 ## Archivos previstos
 
@@ -134,3 +134,9 @@ python app.py --self-test
 
 - [x] Alcance definido.
 - [x] Plan de implementación creado.
+- [x] Explorador derecho y árbol incremental implementados.
+- [x] Apertura de carpeta y archivos integrada con el editor.
+- [x] Suite completa: 128 pruebas aprobadas.
+- [x] Prueba real de creación, carga y visibilidad de Tkinter aprobada.
+- [x] Autoprueba del código fuente aprobada.
+- [x] No se generó ni reconstruyó ningún EXE.
