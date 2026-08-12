@@ -10,7 +10,7 @@ class BuiltinSpec:
     return_type: str
 
 
-BUILTINS = {
+STANDARD_BUILTINS = {
     "inputInt": BuiltinSpec((), "int"),
     "inputFloat": BuiltinSpec((), "float"),
     "inputString": BuiltinSpec((), "string"),
@@ -23,6 +23,21 @@ BUILTINS = {
     "contains": BuiltinSpec(("string", "string"), "bool"),
     "regexMatch": BuiltinSpec(("string", "string"), "bool"),
 }
+
+
+GAME_BUILTINS = {
+    "gameInit": BuiltinSpec(("int", "int"), "void"),
+    "gameClear": BuiltinSpec(("string",), "void"),
+    "gameRect": BuiltinSpec(("float", "float", "float", "float", "string"), "void"),
+    "gameText": BuiltinSpec(("string", "float", "float", "string"), "void"),
+    "gameKey": BuiltinSpec(("string",), "bool"),
+    "gameDelta": BuiltinSpec((), "float"),
+    "gameWidth": BuiltinSpec((), "int"),
+    "gameHeight": BuiltinSpec((), "int"),
+}
+
+
+BUILTINS = {**STANDARD_BUILTINS, **GAME_BUILTINS}
 
 
 def execute_builtin(name, args, input_provider=None, token=None):
@@ -56,6 +71,12 @@ def execute_builtin(name, args, input_provider=None, token=None):
             return args[1] in args[0]
         if name == "regexMatch":
             return re.search(args[1], args[0]) is not None
+        if name in GAME_BUILTINS:
+            raise MiniLangRuntimeError(
+                f"'{name}' solo está disponible mediante "
+                "Compilar juego web (.html)...",
+                token,
+            )
     except (ValueError, TypeError, re.error) as error:
         raise MiniLangRuntimeError(f"{name}: {error}", token) from error
     raise MiniLangRuntimeError(f"función incorporada desconocida '{name}'", token)

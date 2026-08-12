@@ -2,9 +2,9 @@
 
 Última actualización: **2026-08-12**  
 Zona horaria: **America/Santo_Domingo**  
-Versión visible del IDE: **v4.3**  
+Versión visible del IDE fuente: **v4.4**
 Rama verificada: **main**  
-Commit verificado: **`bc6c278` — Bump app window title to v4.3**
+Commit base verificado: **`bc6c278` — Bump app window title to v4.3**; PLAN9 permanece como cambio local
 
 ## 1. Resumen ejecutivo
 
@@ -23,28 +23,33 @@ Código Mini-Lang
 AST optimizado
     -> Backend JavaScript
     -> Script .js para Node.js o navegador
+
+AST optimizado + contrato de juego
+    -> Runtime Canvas y requestAnimationFrame
+    -> Juego web .html autocontenido
 ```
 
 El proyecto no es solamente un intérprete. Incluye análisis estático, una representación intermedia propia, una máquina virtual, un intérprete del AST usado como referencia, optimizaciones, depuración, módulos, generación de JavaScript, exportación de artefactos y una interfaz de estilo IDE.
 
-El estado actual es funcional y estable para el alcance educativo definido. La verificación realizada para este documento produjo **130 pruebas aprobadas**, autoprueba correcta y sintaxis Python válida.
+El estado actual es funcional y estable para el alcance educativo definido. PLAN9 añadió juegos web con Canvas. La verificación más reciente produjo **141 pruebas aprobadas**, autoprueba correcta, sintaxis Python válida y un fotograma ejecutado con un entorno de navegador simulado en Node.js.
 
 ## 2. Estado verificado
 
 | Elemento | Estado actual |
 |---|---|
-| IDE | Tkinter, versión visible v4.3 |
+| IDE fuente | Tkinter, versión visible v4.4 |
 | Compilación interna | Funcional con F7 |
 | Ejecución en VM | Funcional con F5 |
 | Pseudoensamblador | Generado, mostrado y exportable |
 | Backend JavaScript | Funcional y comprobado con Node.js |
+| Juegos web | HTML autocontenido, Canvas, teclado y ciclo por fotogramas |
 | Explorador de proyecto | Funcional, lateral derecho y carga incremental |
 | Depurador | Pasos, continuación y puntos de interrupción |
-| Pruebas | 130 aprobadas el 2026-08-12 |
+| Pruebas | 141 aprobadas el 2026-08-12 |
 | Autoprueba | Aprobada con `python app.py --self-test` |
 | Validación de sintaxis | Aprobada con `compileall` |
 | Node.js verificado | v24.19.0 |
-| Ejecutable distribuible actual | Generado y verificado en `release-v4.3` |
+| Ejecutable distribuible actual | `release-v4.4`, con PLAN9; `release-v4.3` se conserva como respaldo |
 | Estado Git | Hay documentación y artefactos locales pendientes de integrar |
 
 Comandos usados para confirmar el estado:
@@ -131,8 +136,17 @@ Las funciones solamente pueden declararse en el nivel global.
 | `toFloat(valor)` | Convierte a decimal |
 | `contains(texto, búsqueda)` | Comprueba si contiene texto |
 | `regexMatch(texto, patrón)` | Evalúa una expresión regular |
+| `gameInit(ancho, alto)` | Inicializa el Canvas del juego web |
+| `gameClear(color)` | Limpia el Canvas con un color |
+| `gameRect(x, y, ancho, alto, color)` | Dibuja un rectángulo |
+| `gameText(texto, x, y, color)` | Dibuja texto |
+| `gameKey(tecla)` | Indica si una tecla está presionada |
+| `gameDelta()` | Segundos del fotograma actual |
+| `gameWidth()` / `gameHeight()` | Dimensiones del Canvas |
 
 Los errores de entrada, conversión, substring o expresión regular se presentan como errores de ejecución de Mini-Lang.
+
+Las funciones `game*` son exclusivas de `Compilar juego web (.html)...`; F5 las reconoce semánticamente, pero no puede ejecutarlas en la VM.
 
 ### 3.7 Módulos
 
@@ -236,6 +250,8 @@ El intérprete del AST no es el camino principal de ejecución de la GUI. Se man
 - conversiones;
 - protección contra colisiones de identificadores.
 
+En el destino de juego web, el runtime añade Canvas 2D, estado de teclado, dimensiones, `delta`, `requestAnimationFrame`, límite de instrucciones por fotograma y presentación de errores dentro de la página.
+
 Los `int` se representan mediante `BigInt`, lo que evita perder precisión fuera del rango seguro de `Number`.
 
 No se usa `eval` para ejecutar JavaScript dentro de Tkinter.
@@ -253,7 +269,7 @@ No se usa `eval` para ejecutar JavaScript dentro de Tkinter.
 - pestañas de salida, errores, tokens, AST, símbolos, pseudoensamblador, JavaScript, depuración y entrada;
 - ejecución con F5;
 - compilación interna con F7;
-- exportación de pseudoensamblador y JavaScript;
+- exportación de pseudoensamblador, JavaScript y juego web HTML;
 - depuración paso a paso;
 - explorador de proyecto lateral derecho;
 - barra de estado con archivo, posición y resultado de operaciones.
@@ -339,6 +355,16 @@ Get-Content .\entrada.txt | node .\programa.js
 
 La ejecución de JavaScript no está integrada como terminal dentro del IDE.
 
+### 7.6 Compilar y ejecutar un juego web
+
+Abre `examples/cuadrado.mini` y utiliza:
+
+```text
+Compilar > Compilar juego web (.html)...
+```
+
+El resultado incluye el código generado, el Canvas y el runtime en un único archivo. Se ejecuta abriendo el `.html` con doble clic en un navegador moderno. F5 no ejecuta gráficos porque continúa usando la VM; si encuentra una llamada `game*`, muestra una indicación explícita para compilar el juego web.
+
 ## 8. Explorador de proyecto
 
 PLAN7 añadió un panel derecho similar al explorador de un editor moderno:
@@ -380,12 +406,13 @@ Los breakpoints no se colocan todavía haciendo clic en el margen del editor.
 | PLAN7 | Explorador de proyecto a la derecha |
 | PLAN8 | F5 para ejecutar y F7 para compilar sin ejecutar |
 | v4.3 | Integración en Git del explorador, exportación, pruebas y actualización de versión |
+| PLAN9 / fuente v4.4 | API de juegos, runtime Canvas y exportación HTML autocontenida |
 
 ### Decisión descartada
 
-Durante PLAN6 se exploró un ejecutor HTML autocontenido. El usuario cambió el objetivo hacia guardar artefactos reales del compilador. La implementación HTML se retiró intencionalmente y no forma parte de v4.3.
+Durante PLAN6 se exploró un ejecutor HTML genérico. El usuario cambió el objetivo hacia guardar artefactos reales del compilador y esa implementación se retiró de v4.3.
 
-No debe reintroducirse un `web_runner.py` o una página HTML salvo que se apruebe como una nueva fase independiente.
+PLAN9 fue aprobado después como una fase independiente: no recupera un IDE web ni un runner genérico, sino que genera un artefacto de juego `.html` limitado a una API Canvas controlada.
 
 ## 11. Cobertura automatizada
 
@@ -395,15 +422,16 @@ La suite actual utiliza `unittest` y no requiere instalar un framework de prueba
 |---|---:|---|
 | `test_language_matrix.py` | 50 | Matriz de operadores y construcciones |
 | `test_minilang.py` | 26 | Lexer, parser, semántica, VM y ejemplos originales |
-| `test_gui_helpers.py` | 13 | GUI, PLAN6, F5/F7 y JavaScript exportado |
+| `test_gui_helpers.py` | 14 | GUI, exportaciones, F5/F7, JavaScript y juego HTML |
 | `test_plan2_features.py` | 12 | Builtins, módulos, optimización y depuración |
 | `test_javascript_codegen.py` | 11 | Estructura y paridad del backend JavaScript |
 | `test_numeric_semantics.py` | 9 | Promociones y casos numéricos |
 | `test_file_explorer.py` | 8 | Árbol, rutas y apertura segura |
 | `test_advanced_examples.py` | 1 | Programa avanzado completo |
-| **Total** | **130** | **Suite completa aprobada** |
+| `test_web_game.py` | 10 | Contrato, Canvas, HTML, VM, fotograma y límites |
+| **Total** | **141** | **Suite completa aprobada** |
 
-Las pruebas de JavaScript usan Node.js cuando está disponible y comparan la salida con la VM. También cubren enteros grandes, módulos, entradas, errores y límites de ejecución.
+Las pruebas de JavaScript usan Node.js cuando está disponible y comparan la salida con la VM. También cubren enteros grandes, módulos, entradas, errores y límites de ejecución. PLAN9 simula las primitivas necesarias del navegador para ejecutar un fotograma y comprobar operaciones reales de dibujo sin depender de una interfaz gráfica durante la suite.
 
 ## 12. Diagnósticos
 
@@ -448,6 +476,7 @@ Estas limitaciones no son fallos de las pruebas; son fronteras del diseño actua
 
 - `MiniLang.spec` conserva la receta histórica de PyInstaller.
 - La build final autorizada de v4.3 está en `release-v4.3`.
+- La build autorizada con PLAN9 está en `release-v4.4`; no sustituyó ni eliminó v4.3.
 - `MiniLang.exe` fue generado con Python 3.12.10 y PyInstaller 6.14.2.
 - La autoprueba del EXE terminó con código de salida 0.
 - El release incluye `MiniLang.exe`, `MiniLang-v4.3.zip`, `RELEASE_NOTES.md` y `SHA256SUMS.txt`.
@@ -456,15 +485,15 @@ Estas limitaciones no son fallos de las pruebas; son fronteras del diseño actua
 
 ### Navegador y juegos
 
-El traspaso histórico proponía una biblioteca gráfica y juegos de navegador, pero no se implementaron:
+PLAN9 implementó la primera biblioteca gráfica de navegador:
 
-- no existe API Canvas;
-- no existen `gameInit`, `gameRect`, `gameText` o entrada de teclado para juegos;
-- no existe ciclo `requestAnimationFrame`;
-- no existe `examples/pong.mini`;
-- no existe runner HTML incluido.
+- Canvas 2D con limpieza, rectángulos y texto;
+- teclado en tiempo real;
+- ciclo `requestAnimationFrame` con `delta`;
+- HTML autocontenido y ejemplo de un cuadrado móvil;
+- errores visibles y límite de instrucciones por fotograma.
 
-El backend JavaScript sí está terminado y constituye una base para retomar esa idea en un plan futuro.
+Todavía no existen sprites, imágenes, círculos, audio, ratón, colisiones incorporadas, escenas ni `examples/pong.mini`. El navegador real debe abrirse manualmente; el IDE no aloja ni ejecuta el juego internamente.
 
 ## 14. Qué falta realmente
 
@@ -487,7 +516,7 @@ El backend JavaScript sí está terminado y constituye una base para retomar esa
 
 ### Prioridad 2 — Calidad y automatización
 
-1. Añadir integración continua para ejecutar las 130 pruebas.
+1. Añadir integración continua para ejecutar las 141 pruebas.
 2. Añadir medición de cobertura.
 3. Incorporar formateo, lint y análisis estático de Python.
 4. Probar proyectos grandes y carga incremental del explorador.
@@ -495,9 +524,9 @@ El backend JavaScript sí está terminado y constituye una base para retomar esa
 
 ### Prioridad 3 — Nuevas capacidades opcionales
 
-1. Runner seguro para navegador como proyecto separado.
-2. Biblioteca gráfica Canvas para juegos.
-3. Ejemplo Pong.
+1. Ampliar la API del juego con círculos, imágenes, audio o ratón.
+2. Añadir un ejemplo Pong sobre el runtime de PLAN9.
+3. Añadir una vista previa segura como proyecto separado, solo si se aprueba expresamente.
 4. Formato de bytecode serializado real, si se desea ejecutar fuera del IDE.
 5. Firma digital, instalador o publicación remota de v4.3, si se desean como una fase posterior.
 
@@ -512,6 +541,7 @@ En el momento de esta revisión:
 - este documento se añade como nuevo archivo;
 - no se creó commit;
 - posteriormente se autorizó y generó la distribución final local `release-v4.3`.
+- PLAN9 y la fuente v4.4 son cambios locales posteriores al commit base; `release-v4.4` sí los contiene y el EXE de v4.3 permanece como respaldo sin estos cambios.
 
 El README enlaza documentos que están presentes localmente pero ignorados por Git. Antes de clonar el proyecto en otra PC, hay que versionarlos o quitar esos enlaces. De lo contrario, el README puede apuntar a archivos que no llegarán al clon.
 
@@ -526,7 +556,7 @@ El README enlaza documentos que están presentes localmente pero ignorados por G
 7. Mantener paridad entre VM, intérprete y JavaScript.
 8. Preservar la división entera de piso y el módulo con semántica de Python.
 9. No confundir `.bin` simulado con un binario real.
-10. No reintroducir el runner HTML descartado sin un objetivo nuevo y explícito.
+10. Mantener separado el artefacto de juego aprobado en PLAN9 de cualquier runner HTML genérico.
 11. No atravesar enlaces o puntos de reanálisis desde el explorador.
 12. No reconstruir, modificar o publicar EXE sin autorización explícita.
 13. No sobrescribir cambios ajenos ni limpiar el repositorio destructivamente.
@@ -568,6 +598,7 @@ El README enlaza documentos que están presentes localmente pero ignorados por G
 - `docs/PLAN6.md`
 - `docs/PLAN7.md`
 - `docs/PLAN8.md`
+- `docs/PLAN9.md`
 
 No existe actualmente `PLAN3.md`. La numeración salta de PLAN2 a PLAN4 debido a la evolución histórica de las tareas.
 
@@ -577,7 +608,7 @@ Antes de empezar una nueva fase:
 
 - [ ] Leer este documento y el plan más reciente.
 - [ ] Revisar `git status` para proteger cambios locales.
-- [ ] Ejecutar las 130 pruebas.
+- [ ] Ejecutar las 141 pruebas.
 - [ ] Ejecutar `python app.py --self-test`.
 - [ ] Confirmar si Node.js está disponible cuando se toque el backend JavaScript.
 - [ ] Crear un PLAN nuevo si la ampliación requiere varias fases.
@@ -595,6 +626,6 @@ Antes de entregar una fase:
 
 ## 19. Conclusión
 
-Mini-Lang v4.3 ya cumple bien su propósito como lenguaje educativo y laboratorio de compiladores. Tiene un frontend completo, semántica estática, optimización, dos backends utilizables, ejecución segura, depuración, módulos, pruebas amplias y una interfaz cercana a un IDE pequeño.
+La fuente de Mini-Lang v4.4 ya cumple bien su propósito como lenguaje educativo y laboratorio de compiladores. Tiene un frontend completo, semántica estática, optimización, VM, JavaScript, un destino de juego web, ejecución segura, depuración, módulos, pruebas amplias y una interfaz cercana a un IDE pequeño.
 
-No hay una corrección funcional crítica conocida pendiente dentro del alcance actual. El trabajo inmediato más importante es cerrar la documentación y el estado de Git. Las ampliaciones posteriores deberían concentrarse en experiencia de IDE, automatización de calidad o, si se aprueba expresamente, el entorno de navegador y juegos planteado históricamente.
+No hay una corrección funcional crítica conocida pendiente dentro del alcance actual. El trabajo inmediato más importante es probar visualmente `examples/cuadrado.mini` en el navegador elegido, cerrar la documentación y el estado de Git y decidir cuándo generar una distribución posterior a v4.3. Las ampliaciones siguientes pueden concentrarse en Pong, más primitivas gráficas, experiencia de IDE o automatización de calidad.

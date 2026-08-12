@@ -7,6 +7,7 @@ Mini-Lang es un lenguaje educativo con análisis léxico, parser, AST, análisis
 - Python 3.10 o superior.
 - Tkinter.
 - Node.js opcional para ejecutar y comparar la salida JavaScript.
+- Un navegador moderno para los juegos web.
 
 ## Inicio
 
@@ -52,6 +53,7 @@ for (int i = 0; i < 5; i++) {
 - Pseudoensamblador ejecutable por la máquina virtual.
 - JavaScript ejecutable en Node.js o navegador.
 - Menú `Compilar` para guardar pseudoensamblador o JavaScript.
+- Destino `Juego web (.html)` con Canvas, teclado y animación.
 - Explorador de proyecto con árbol de carpetas y archivos.
 - Atajos `F5` para ejecutar y `F7` para compilar sin ejecutar.
 - Ejecución paso a paso.
@@ -64,8 +66,34 @@ El menú `Compilar` permite guardar el programa sin ejecutarlo:
 
 - `Compilar a pseudoensamblador...` genera texto `.asm`, `.txt` o `.bin` simulado.
 - `Compilar a JavaScript...` genera un script `.js` ejecutable con Node.js.
+- `Compilar juego web (.html)...` genera un juego de navegador autocontenido.
 
 La extensión `.bin` representa pseudoensamblador textual educativo; no es código máquina ni un ejecutable nativo.
+
+## Juego web
+
+Abre [`examples/cuadrado.mini`](examples/cuadrado.mini) desde el IDE y selecciona `Compilar > Compilar juego web (.html)...`. Guarda el archivo y ábrelo con doble clic en Edge, Chrome o Firefox. No necesita servidor ni archivos adicionales.
+
+Un juego declara este ciclo de vida:
+
+```text
+void iniciar() {
+    gameInit(640, 360);
+}
+
+void actualizar(float delta) {
+    // Actualizar posiciones según el teclado y el tiempo.
+}
+
+void dibujar() {
+    gameClear("black");
+    gameRect(20.0, 20.0, 40.0, 40.0, "blue");
+}
+```
+
+Funciones disponibles: `gameInit`, `gameClear`, `gameRect`, `gameText`, `gameKey`, `gameDelta`, `gameWidth` y `gameHeight`.
+
+F5 ejecuta la VM y no dispone de gráficos. Para ejecutar llamadas `game*`, exporta el juego como `.html`. F7 sí puede analizar el programa y mostrar sus resultados compilados, pero no abre el navegador.
 
 ## Explorador de proyecto
 
@@ -89,6 +117,7 @@ F7 no guarda un archivo. Para exportar se mantienen las opciones `Compilar a pse
 - [Plan 6 — Exportación de compilados](docs/PLAN6.md)
 - [Plan 7 — Explorador de proyecto](docs/PLAN7.md)
 - [Plan 8 — Atajos de compilación y ejecución](docs/PLAN8.md)
+- [Plan 9 — Juegos web con Canvas](docs/PLAN9.md)
 - [Seguimiento general del proyecto](docs/SEGUIMIENTO.md)
 - [Gramática](docs/GRAMMAR.md)
 - [Bytecode](docs/BYTECODE.md)

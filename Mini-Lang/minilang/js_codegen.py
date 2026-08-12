@@ -24,14 +24,15 @@ from .ast_nodes import (
     VarDecl,
     WhileStmt,
 )
-from .builtins import BUILTINS
+from .builtins import BUILTINS, GAME_BUILTINS
 from .errors import CodeGenerationError
 
 
 class JavaScriptGenerator:
-    def __init__(self, max_steps=100_000, max_call_depth=500):
+    def __init__(self, max_steps=100_000, max_call_depth=500, web_game=False):
         self.max_steps = max_steps
         self.max_call_depth = max_call_depth
+        self.web_game = web_game
 
     def generate(self, ast):
         self.lines = self._runtime().splitlines()
@@ -64,6 +65,13 @@ class JavaScriptGenerator:
         for node in ast:
             if not isinstance(node, FuncDecl):
                 self._emit_statement(node)
+        if self.web_game:
+            self._line(
+                "__ml_game_start("
+                f"{self._func_name('iniciar')}, "
+                f"{self._func_name('actualizar')}, "
+                f"{self._func_name('dibujar')});"
+            )
         self.indent -= 1
         self._line("});")
         return "\n".join(self.lines)
@@ -251,6 +259,24 @@ class JavaScriptGenerator:
     def _call(self, node):
         args = [self._expr(argument) for argument in node.args]
         line, column = self._position(node)
+        if node.nombre in GAME_BUILTINS:
+            if not self.web_game:
+                return (
+                    f"__ml_game_target_error({self._json(node.nombre)}, "
+                    f"{line}, {column})"
+                )
+            game_calls = {
+                "gameInit": "__ml_game_init",
+                "gameClear": "__ml_game_clear",
+                "gameRect": "__ml_game_rect",
+                "gameText": "__ml_game_text",
+                "gameKey": "__ml_game_key",
+                "gameDelta": "__ml_game_delta_value",
+                "gameWidth": "__ml_game_width",
+                "gameHeight": "__ml_game_height",
+            }
+            values = ", ".join([*args, str(line), str(column)])
+            return f"{game_calls[node.nombre]}({values})"
         if node.nombre == "inputInt":
             return f"__ml_input_int({line}, {column})"
         if node.nombre == "inputFloat":
@@ -569,6 +595,10 @@ function __ml_regex_match(text, pattern, line, column) {
     }
 }
 
+function __ml_game_target_error(name, line, column) {
+    __ml_error(`'${name}' solo está disponible mediante Compilar juego web (.html)...`, line, column);
+}
+
 function __ml_run(main) {
     try {
         main();
@@ -581,6 +611,186 @@ function __ml_run(main) {
         throw error;
     }
 }'''
-        return runtime.replace("__MAX_STEPS__", str(self.max_steps)).replace(
+        runtime = runtime.replace("__MAX_STEPS__", str(self.max_steps)).replace(
             "__MAX_CALL_DEPTH__", str(self.max_call_depth)
         )
+        if self.web_game:
+            runtime += "\n\n" + self._game_runtime()
+        return runtime
+
+    @staticmethod
+    def _game_runtime():
+        return r'''let __ml_game_canvas = null;
+let __ml_game_context_2d = null;
+let __ml_game_delta = 0.0;
+let __ml_game_running = false;
+let __ml_game_keyboard_installed = false;
+const __ml_game_keys = new Set();
+
+function __ml_game_require_browser(line, column) {
+    if (typeof document === "undefined" || typeof window === "undefined" ||
+            typeof requestAnimationFrame !== "function") {
+        __ml_error("el juego web debe abrirse en un navegador", line, column);
+    }
+}
+
+function __ml_game_install_keyboard() {
+    if (__ml_game_keyboard_installed) {
+        return;
+    }
+    const blocked = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "]);
+    window.addEventListener("keydown", (event) => {
+        const key = String(event.key);
+        __ml_game_keys.add(key);
+        __ml_game_keys.add(key.toLowerCase());
+        if (blocked.has(key) && typeof event.preventDefault === "function") {
+            event.preventDefault();
+        }
+    });
+    window.addEventListener("keyup", (event) => {
+        const key = String(event.key);
+        __ml_game_keys.delete(key);
+        __ml_game_keys.delete(key.toLowerCase());
+        if (blocked.has(key) && typeof event.preventDefault === "function") {
+            event.preventDefault();
+        }
+    });
+    window.addEventListener("blur", () => __ml_game_keys.clear());
+    __ml_game_keyboard_installed = true;
+}
+
+function __ml_game_init(width, height, line, column) {
+    __ml_game_require_browser(line, column);
+    if (typeof width !== "bigint" || typeof height !== "bigint" ||
+            width <= 0n || height <= 0n || width > 4096n || height > 4096n) {
+        __ml_error("gameInit: ancho y alto deben estar entre 1 y 4096", line, column);
+    }
+    const canvas = document.getElementById("minilang-canvas");
+    if (!canvas || typeof canvas.getContext !== "function") {
+        __ml_error("no se encontró el canvas de Mini-Lang", line, column);
+    }
+    const context = canvas.getContext("2d");
+    if (!context) {
+        __ml_error("el navegador no pudo crear el contexto Canvas 2D", line, column);
+    }
+    canvas.width = Number(width);
+    canvas.height = Number(height);
+    context.imageSmoothingEnabled = false;
+    context.textBaseline = "top";
+    context.font = "20px system-ui, sans-serif";
+    __ml_game_canvas = canvas;
+    __ml_game_context_2d = context;
+    __ml_game_install_keyboard();
+    if (typeof canvas.focus === "function") {
+        canvas.focus();
+    }
+}
+
+function __ml_game_context(line, column) {
+    if (__ml_game_context_2d === null || __ml_game_canvas === null) {
+        __ml_error("debes llamar gameInit(ancho, alto) dentro de iniciar()", line, column);
+    }
+    return __ml_game_context_2d;
+}
+
+function __ml_game_number(value, name, line, column) {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+        __ml_error(`${name}: se esperaba un número finito`, line, column);
+    }
+    return value;
+}
+
+function __ml_game_clear(color, line, column) {
+    const context = __ml_game_context(line, column);
+    context.fillStyle = color;
+    context.fillRect(0, 0, __ml_game_canvas.width, __ml_game_canvas.height);
+}
+
+function __ml_game_rect(x, y, width, height, color, line, column) {
+    const context = __ml_game_context(line, column);
+    context.fillStyle = color;
+    context.fillRect(
+        __ml_game_number(x, "gameRect", line, column),
+        __ml_game_number(y, "gameRect", line, column),
+        __ml_game_number(width, "gameRect", line, column),
+        __ml_game_number(height, "gameRect", line, column)
+    );
+}
+
+function __ml_game_text(text, x, y, color, line, column) {
+    const context = __ml_game_context(line, column);
+    context.fillStyle = color;
+    context.fillText(
+        text,
+        __ml_game_number(x, "gameText", line, column),
+        __ml_game_number(y, "gameText", line, column)
+    );
+}
+
+function __ml_game_key(key, line, column) {
+    __ml_game_require_browser(line, column);
+    return __ml_game_keys.has(key) || __ml_game_keys.has(key.toLowerCase());
+}
+
+function __ml_game_delta_value(_line, _column) {
+    return __ml_game_delta;
+}
+
+function __ml_game_width(line, column) {
+    __ml_game_context(line, column);
+    return BigInt(__ml_game_canvas.width);
+}
+
+function __ml_game_height(line, column) {
+    __ml_game_context(line, column);
+    return BigInt(__ml_game_canvas.height);
+}
+
+function __ml_game_fail(error) {
+    __ml_game_running = false;
+    const message = error instanceof Error ? error.message : String(error);
+    const panel = typeof document === "undefined" ? null : document.getElementById("minilang-error");
+    if (panel) {
+        panel.textContent = message;
+        panel.style.display = "block";
+    }
+    if (typeof console !== "undefined" && typeof console.error === "function") {
+        console.error(message);
+    }
+}
+
+function __ml_game_start(iniciar, actualizar, dibujar) {
+    __ml_game_require_browser(0, 0);
+    __ml_game_running = true;
+    const errorPanel = document.getElementById("minilang-error");
+    if (errorPanel) {
+        errorPanel.textContent = "";
+        errorPanel.style.display = "none";
+    }
+    try {
+        __ml_steps = 0;
+        __ml_call(iniciar, 0, 0);
+    } catch (error) {
+        __ml_game_fail(error);
+        return;
+    }
+
+    let previous = typeof performance !== "undefined" ? performance.now() : Date.now();
+    function frame(now) {
+        if (!__ml_game_running) {
+            return;
+        }
+        try {
+            __ml_game_delta = Math.min(Math.max((now - previous) / 1000, 0), 0.1);
+            previous = now;
+            __ml_steps = 0;
+            __ml_call(() => actualizar(__ml_game_delta), 0, 0);
+            __ml_call(dibujar, 0, 0);
+        } catch (error) {
+            __ml_game_fail(error);
+            return;
+        }
+        requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+}'''

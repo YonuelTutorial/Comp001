@@ -1,0 +1,43 @@
+// Juego web mínimo: mueve el cuadrado con las flechas.
+float jugadorX = 300.0;
+float jugadorY = 160.0;
+float tamano = 40.0;
+float velocidad = 180.0;
+
+void iniciar() {
+    gameInit(640, 360);
+}
+
+void actualizar(float delta) {
+    if (gameKey("ArrowLeft")) {
+        jugadorX -= velocidad * delta;
+    }
+    if (gameKey("ArrowRight")) {
+        jugadorX += velocidad * delta;
+    }
+    if (gameKey("ArrowUp")) {
+        jugadorY -= velocidad * delta;
+    }
+    if (gameKey("ArrowDown")) {
+        jugadorY += velocidad * delta;
+    }
+
+    if (jugadorX < 0.0) {
+        jugadorX = 0.0;
+    }
+    if (jugadorY < 0.0) {
+        jugadorY = 0.0;
+    }
+    if (jugadorX > toFloat(gameWidth()) - tamano) {
+        jugadorX = toFloat(gameWidth()) - tamano;
+    }
+    if (jugadorY > toFloat(gameHeight()) - tamano) {
+        jugadorY = toFloat(gameHeight()) - tamano;
+    }
+}
+
+void dibujar() {
+    gameClear("#101820");
+    gameRect(jugadorX, jugadorY, tamano, tamano, "#40a9ff");
+    gameText("Mueve el cuadro con las flechas", 20.0, 20.0, "white");
+}

@@ -229,6 +229,9 @@ class MainApp:
         compile_menu.add_command(
             label="Compilar a JavaScript...", command=self.compile_javascript
         )
+        compile_menu.add_command(
+            label="Compilar juego web (.html)...", command=self.compile_web_game
+        )
         menu.add_cascade(label="Compilar", menu=compile_menu)
 
         edit_menu = tk.Menu(menu, tearoff=False)
@@ -469,11 +472,21 @@ class MainApp:
             filetypes=(("JavaScript", "*.js"), ("Texto", "*.txt"), ("Todos", "*.*")),
         )
 
-    def _export_compilation(self, label, attribute, extension, filetypes):
+    def compile_web_game(self):
+        return self._export_compilation(
+            label="Juego web",
+            attribute="game_html",
+            extension=".html",
+            filetypes=(("Página web", "*.html"), ("Todos", "*.*")),
+            compiler_method="compile_game",
+        )
+
+    def _export_compilation(
+        self, label, attribute, extension, filetypes, compiler_method="compile"
+    ):
         try:
-            result = Compiler(max_steps=1_000_000, max_call_depth=500).compile(
-                self.editor.get(), self.current_file
-            )
+            compiler = Compiler(max_steps=1_000_000, max_call_depth=500)
+            result = getattr(compiler, compiler_method)(self.editor.get(), self.current_file)
             source_name = Path(self.current_file).stem if self.current_file else "programa"
             path = filedialog.asksaveasfilename(
                 parent=self.root,
@@ -712,7 +725,7 @@ class MainApp:
     def update_title(self):
         name = self.current_file.name if self.current_file else "Sin título"
         marker = "*" if self.dirty else ""
-        self.root.title(f"{marker}{name} — Mini-Lang v4.3")
+        self.root.title(f"{marker}{name} — Mini-Lang v4.4")
 
     def _confirm_discard(self):
         if not self.dirty:

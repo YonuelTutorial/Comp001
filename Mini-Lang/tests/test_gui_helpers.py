@@ -25,7 +25,7 @@ class GuiHelpersTests(unittest.TestCase):
     def test_main_app_commands_exist(self):
         for command in (
             "open_file", "save_file", "run_code", "build_code", "compile_assembly",
-            "compile_javascript", "open_folder", "toggle_explorer",
+            "compile_javascript", "compile_web_game", "open_folder", "toggle_explorer",
             "start_debug", "find_text",
         ):
             self.assertTrue(callable(getattr(app.MainApp, command)))
@@ -33,7 +33,7 @@ class GuiHelpersTests(unittest.TestCase):
     def test_javascript_panel_is_configured(self):
         self.assertIn("JavaScript", app.MainApp.PANEL_NAMES)
 
-    def test_compile_menu_contains_both_targets(self):
+    def test_compile_menu_contains_all_targets(self):
         menus = []
 
         class FakeMenu:
@@ -61,6 +61,7 @@ class GuiHelpersTests(unittest.TestCase):
         self.assertIn("Abrir carpeta...", [item["label"] for item in menus[1].commands])
         self.assertEqual([item["label"] for item in menus[2].commands], [
             "Compilar", "Compilar a pseudoensamblador...", "Compilar a JavaScript...",
+            "Compilar juego web (.html)...",
         ])
         self.assertEqual(menus[2].commands[0]["accelerator"], "F7")
         bindings = {call.args[0]: call.args[1] for call in fake.root.bind.call_args_list}
@@ -138,6 +139,24 @@ class GuiHelpersTests(unittest.TestCase):
         self.assertTrue(exported.startswith('"use strict";'))
         self.assertIn("__ml_print", exported)
         fake.status.set.assert_called_once_with(f"Compilado a JavaScript: {path}")
+
+    def test_compile_web_game_writes_a_self_contained_html(self):
+        source = """
+        void iniciar(){gameInit(320, 200);}
+        void actualizar(float delta){}
+        void dibujar(){gameClear("black");}
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "juego.html"
+            fake = self._fake_app(source)
+            with patch("app.filedialog.asksaveasfilename", return_value=str(path)) as dialog:
+                self.assertTrue(fake.compile_web_game())
+            exported = path.read_text(encoding="utf-8")
+        self.assertEqual(exported, fake.last_result.game_html)
+        self.assertIn('<canvas id="minilang-canvas"', exported)
+        self.assertIn("requestAnimationFrame", exported)
+        fake.status.set.assert_called_once_with(f"Compilado a Juego web: {path}")
+        self.assertEqual(dialog.call_args.kwargs["initialfile"], "programa.html")
 
     @unittest.skipUnless(shutil.which("node"), "Node.js no está disponible")
     def test_exported_javascript_runs_with_node(self):

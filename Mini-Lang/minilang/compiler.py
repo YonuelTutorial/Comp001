@@ -10,7 +10,8 @@ from .optimizer import Optimizer
 from .parser import Parser
 from .semantic import SemanticAnalyzer
 from .vm import VirtualMachine
-from .ast_nodes import ImportStmt
+from .web_game import build_game_html
+from .ast_nodes import FuncDecl, ImportStmt
 from .errors import SemanticError
 
 
@@ -24,6 +25,7 @@ class CompilationResult:
     symbols: dict
     unoptimized_assembly: str
     javascript: str = ""
+    game_html: str = ""
 
 
 class Compiler:
@@ -40,18 +42,30 @@ class Compiler:
         return result
 
     def compile(self, source, source_path=None):
+        return self._compile(source, source_path, web_game=False)
+
+    def compile_game(self, source, source_path=None):
+        return self._compile(source, source_path, web_game=True)
+
+    def _compile(self, source, source_path=None, web_game=False):
         tokens = Lexer().tokenize(source)
         ast = Parser(tokens).parse()
         base_dir = Path(source_path).resolve().parent if source_path else Path.cwd()
         ast = self._resolve_imports(ast, base_dir, set(), [])
         analyzer = SemanticAnalyzer()
         analyzer.analyze(ast)
+        if web_game:
+            self._validate_game_contract(ast)
         unoptimized_assembly = CodeGenerator().generate(ast)
         optimized = Optimizer().optimize(ast)
         generator = CodeGenerator()
         bytecode = generator.build(optimized)
         assembly = bytecode.render()
-        javascript = JavaScriptGenerator(self.max_steps, self.max_call_depth).generate(optimized)
+        javascript = JavaScriptGenerator(
+            self.max_steps, self.max_call_depth, web_game=web_game
+        ).generate(optimized)
+        title = f"{Path(source_path).stem} — Mini-Lang" if source_path else "Juego Mini-Lang"
+        game_html = build_game_html(javascript, title) if web_game else ""
         return CompilationResult(
             tokens=tokens,
             ast=optimized,
@@ -61,7 +75,39 @@ class Compiler:
             symbols=analyzer.symbol_table(),
             unoptimized_assembly=unoptimized_assembly,
             javascript=javascript,
+            game_html=game_html,
         )
+
+    @staticmethod
+    def _validate_game_contract(ast):
+        declarations = {
+            node.nombre: node for node in ast if isinstance(node, FuncDecl)
+        }
+        required = {
+            "iniciar": ("void", ()),
+            "actualizar": ("void", ("float",)),
+            "dibujar": ("void", ()),
+        }
+        signatures = {
+            "iniciar": "void iniciar()",
+            "actualizar": "void actualizar(float delta)",
+            "dibujar": "void dibujar()",
+        }
+        fallback_token = getattr(ast[0], "token", None) if ast else None
+        for name, (return_type, parameter_types) in required.items():
+            declaration = declarations.get(name)
+            if declaration is None:
+                raise SemanticError(
+                    f"juego web requiere la función '{signatures[name]}'",
+                    fallback_token,
+                )
+            actual_parameters = tuple(parameter.tipo for parameter in declaration.params)
+            if declaration.tipo != return_type or actual_parameters != parameter_types:
+                raise SemanticError(
+                    f"la función de juego '{name}' debe declararse como "
+                    f"'{signatures[name]}'",
+                    declaration.token,
+                )
 
     def _resolve_imports(self, ast, base_dir, loaded, stack):
         resolved = []

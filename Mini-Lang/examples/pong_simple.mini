@@ -1,0 +1,122 @@
+// Pong sencillo: flechas arriba y abajo contra una pala automática.
+float palaJugadorY = 135.0;
+float palaCpuY = 135.0;
+float pelotaX = 313.0;
+float pelotaY = 173.0;
+float pelotaVX = 230.0;
+float pelotaVY = 150.0;
+float velocidadPala = 260.0;
+float velocidadCpu = 190.0;
+int puntosJugador = 0;
+int puntosCpu = 0;
+
+void reiniciarPelota(bool haciaJugador) {
+    pelotaX = 313.0;
+    pelotaY = 173.0;
+    pelotaVY = 150.0;
+
+    if (haciaJugador) {
+        pelotaVX = -230.0;
+    } else {
+        pelotaVX = 230.0;
+    }
+}
+
+void iniciar() {
+    gameInit(640, 360);
+}
+
+void actualizar(float delta) {
+    // Movimiento del jugador.
+    if (gameKey("ArrowUp")) {
+        palaJugadorY -= velocidadPala * delta;
+    }
+    if (gameKey("ArrowDown")) {
+        palaJugadorY += velocidadPala * delta;
+    }
+
+    if (palaJugadorY < 0.0) {
+        palaJugadorY = 0.0;
+    }
+    if (palaJugadorY > 270.0) {
+        palaJugadorY = 270.0;
+    }
+
+    // La pala derecha sigue lentamente la pelota.
+    if (palaCpuY + 45.0 < pelotaY) {
+        palaCpuY += velocidadCpu * delta;
+    }
+    if (palaCpuY + 45.0 > pelotaY) {
+        palaCpuY -= velocidadCpu * delta;
+    }
+
+    if (palaCpuY < 0.0) {
+        palaCpuY = 0.0;
+    }
+    if (palaCpuY > 270.0) {
+        palaCpuY = 270.0;
+    }
+
+    // Movimiento de la pelota.
+    pelotaX += pelotaVX * delta;
+    pelotaY += pelotaVY * delta;
+
+    if (pelotaY <= 0.0) {
+        pelotaY = 0.0;
+        pelotaVY = -pelotaVY;
+    }
+    if (pelotaY >= 346.0) {
+        pelotaY = 346.0;
+        pelotaVY = -pelotaVY;
+    }
+
+    // Colisión con la pala del jugador.
+    if (pelotaVX < 0.0 && pelotaX <= 35.0 && pelotaX + 14.0 >= 20.0) {
+        if (pelotaY + 14.0 >= palaJugadorY && pelotaY <= palaJugadorY + 90.0) {
+            pelotaX = 35.0;
+            pelotaVX = -pelotaVX;
+            pelotaVY += (pelotaY - palaJugadorY - 38.0) * 3.0;
+        }
+    }
+
+    // Colisión con la pala automática.
+    if (pelotaVX > 0.0 && pelotaX + 14.0 >= 605.0 && pelotaX <= 620.0) {
+        if (pelotaY + 14.0 >= palaCpuY && pelotaY <= palaCpuY + 90.0) {
+            pelotaX = 591.0;
+            pelotaVX = -pelotaVX;
+            pelotaVY += (pelotaY - palaCpuY - 38.0) * 3.0;
+        }
+    }
+
+    // Puntuación.
+    if (pelotaX < -20.0) {
+        puntosCpu += 1;
+        reiniciarPelota(false);
+    }
+    if (pelotaX > 660.0) {
+        puntosJugador += 1;
+        reiniciarPelota(true);
+    }
+}
+
+void dibujar() {
+    gameClear("#07111f");
+
+    // Línea central punteada.
+    gameRect(318.0, 10.0, 4.0, 25.0, "#40546d");
+    gameRect(318.0, 55.0, 4.0, 25.0, "#40546d");
+    gameRect(318.0, 100.0, 4.0, 25.0, "#40546d");
+    gameRect(318.0, 145.0, 4.0, 25.0, "#40546d");
+    gameRect(318.0, 190.0, 4.0, 25.0, "#40546d");
+    gameRect(318.0, 235.0, 4.0, 25.0, "#40546d");
+    gameRect(318.0, 280.0, 4.0, 25.0, "#40546d");
+    gameRect(318.0, 325.0, 4.0, 25.0, "#40546d");
+
+    gameRect(20.0, palaJugadorY, 15.0, 90.0, "#40a9ff");
+    gameRect(605.0, palaCpuY, 15.0, 90.0, "#ff6b6b");
+    gameRect(pelotaX, pelotaY, 14.0, 14.0, "white");
+
+    gameText("Jugador: " + toString(puntosJugador), 90.0, 15.0, "#40a9ff");
+    gameText("CPU: " + toString(puntosCpu), 470.0, 15.0, "#ff6b6b");
+    gameText("Usa las flechas arriba y abajo", 175.0, 330.0, "#b8c7d9");
+}
