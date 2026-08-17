@@ -6,6 +6,7 @@ import re
 import stat
 import sys
 import tkinter as tk
+from dataclasses import dataclass
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
@@ -127,9 +128,19 @@ class CodeEditor(ttk.Frame):
         self.gutter.yview_moveto(first)
 
 
+@dataclass
+class EditorDocument:
+    editor: CodeEditor
+    path: Path | None
+    dirty: bool
+    untitled_name: str
+
+
 class MainApp:
     COMPILATION_WAIT_MS = 1_000
-    EXPLORER_IGNORED = frozenset({".git", "__pycache__", ".pytest_cache"})
+    EXPLORER_IGNORED = frozenset(
+        {".git", ".minilang-trash", "__pycache__", ".pytest_cache"}
+    )
     PANEL_NAMES = (
         "Salida", "Errores", "Tokens", "AST", "Símbolos", "Pseudoensamblador",
         "JavaScript", "Depuración", "Entrada",
@@ -144,6 +155,10 @@ class MainApp:
         self.last_result = None
         self.debugger = None
         self.compilation_dialog = None
+        self.editor_tabs: dict[str, EditorDocument] = {}
+        self.untitled_counter = 0
+        self.editor_notebook: ttk.Notebook
+        self._editor: CodeEditor | None = None
         self.status = tk.StringVar(value="Línea 1, columna 1")
         self.project_name = tk.StringVar(value="Sin carpeta abierta")
         self.explorer_paths = {}
@@ -156,8 +171,17 @@ class MainApp:
             self.root.iconbitmap(default=str(icon))
         self.root.protocol("WM_DELETE_WINDOW", self.close)
         self.setup_ui()
-        self.editor.set(DEMO_SOURCE)
         self.update_title()
+
+    @property
+    def editor(self) -> CodeEditor:
+        if self._editor is None:
+            raise RuntimeError("No hay una pestaña de edición activa.")
+        return self._editor
+
+    @editor.setter
+    def editor(self, value: CodeEditor):
+        self._editor = value
 
     def setup_ui(self):
         self._menu()
@@ -179,8 +203,10 @@ class MainApp:
         self.workspace.pack(fill=tk.BOTH, expand=True, padx=6)
         self.main_panes = ttk.PanedWindow(self.workspace, orient=tk.VERTICAL)
         self.workspace.add(self.main_panes, weight=4)
-        self.editor = CodeEditor(self.main_panes, self.mark_dirty, self.update_cursor)
-        self.main_panes.add(self.editor, weight=3)
+        self.editor_notebook = ttk.Notebook(self.main_panes)
+        self.editor_notebook.bind("<<NotebookTabChanged>>", self._on_editor_tab_changed)
+        self.main_panes.add(self.editor_notebook, weight=3)
+        self._create_editor_tab(DEMO_SOURCE)
 
         self.notebook = ttk.Notebook(self.main_panes)
         self.main_panes.add(self.notebook, weight=2)
@@ -205,6 +231,9 @@ class MainApp:
         file_menu.add_command(label="Abrir carpeta...", command=self.open_folder)
         file_menu.add_command(label="Guardar", accelerator="Ctrl+S", command=self.save_file)
         file_menu.add_command(label="Guardar como", accelerator="Ctrl+Shift+S", command=self.save_as)
+        file_menu.add_command(
+            label="Cerrar pestaña", accelerator="Ctrl+W", command=self.close_current_tab
+        )
         file_menu.add_separator()
         file_menu.add_command(label="Salir", command=self.close)
         menu.add_cascade(label="Archivo", menu=file_menu)
@@ -245,6 +274,7 @@ class MainApp:
         self.root.bind("<Control-o>", lambda event: self.open_file())
         self.root.bind("<Control-s>", lambda event: self.save_file())
         self.root.bind("<Control-Shift-S>", lambda event: self.save_as())
+        self.root.bind("<Control-w>", lambda event: self.close_current_tab())
         self.root.bind("<Control-f>", lambda event: self.find_text())
         self.root.bind("<Control-h>", lambda event: self.replace_text())
         self.root.bind("<Control-plus>", lambda event: self.increase_font())
@@ -319,6 +349,118 @@ class MainApp:
         parent.columnconfigure(0, weight=1)
         return text
 
+    def _create_editor_tab(self, source="", path=None, dirty=False, select=True):
+        previous_size = self._editor.font_size if self._editor is not None else 11
+        self.untitled_counter += 1
+        untitled_name = (
+            "Sin título" if self.untitled_counter == 1
+            else f"Sin título {self.untitled_counter}"
+        )
+        editor = CodeEditor(self.editor_notebook, self.mark_dirty, self.update_cursor)
+        editor.set_font_size(previous_size)
+        editor.set(source)
+        document = EditorDocument(
+            editor=editor,
+            path=Path(path).resolve() if path is not None else None,
+            dirty=bool(dirty),
+            untitled_name=untitled_name,
+        )
+        self.editor_tabs[str(editor)] = document
+        self.editor_notebook.add(editor, text="")
+        self._update_tab_label(document)
+        if select:
+            self.editor_notebook.select(editor)
+            self._set_active_document(document)
+            editor.text.focus_set()
+        return document
+
+    def _active_document(self):
+        notebook = getattr(self, "editor_notebook", None)
+        if notebook is None:
+            return None
+        selected = notebook.select()
+        return self.editor_tabs.get(str(selected))
+
+    def _find_document_by_path(self, path):
+        candidate = Path(path).resolve()
+        for document in self.editor_tabs.values():
+            if document.path is not None and document.path.resolve() == candidate:
+                return document
+        return None
+
+    def _set_active_document(self, document):
+        if document is None:
+            self._editor = None
+            self.current_file = None
+            self.dirty = False
+        else:
+            self.editor = document.editor
+            self.current_file = document.path
+            self.dirty = document.dirty
+        self.update_title()
+
+    def _select_document(self, document):
+        self.editor_notebook.select(document.editor)
+        self._set_active_document(document)
+        document.editor.text.focus_set()
+
+    def _on_editor_tab_changed(self, _event=None):
+        self._set_active_document(self._active_document())
+
+    def _update_tab_label(self, document):
+        name = document.path.name if document.path is not None else document.untitled_name
+        marker = "*" if document.dirty else ""
+        self.editor_notebook.tab(document.editor, text=f"{marker}{name}")
+
+    def _sync_active_document(self, *, path=None, dirty=None):
+        document = self._active_document()
+        if document is None:
+            return None
+        if path is not None:
+            document.path = Path(path).resolve()
+        if dirty is not None:
+            document.dirty = bool(dirty)
+        self._update_tab_label(document)
+        self._set_active_document(document)
+        return document
+
+    def _remove_document(self, document, create_replacement=True):
+        key = str(document.editor)
+        if key not in self.editor_tabs:
+            return False
+        self.editor_notebook.forget(document.editor)
+        self.editor_tabs.pop(key, None)
+        document.editor.destroy()
+        if not self.editor_tabs and create_replacement:
+            self._create_editor_tab("")
+        else:
+            self._set_active_document(self._active_document())
+        return True
+
+    def _confirm_document_close(self, document):
+        if not document.dirty:
+            return True
+        self._select_document(document)
+        answer = messagebox.askyesnocancel(
+            "Cambios", f"¿Guardar los cambios de {self._document_name(document)}?",
+            parent=self.root,
+        )
+        if answer is None:
+            return False
+        if answer:
+            return self.save_file()
+        return True
+
+    @staticmethod
+    def _document_name(document):
+        return document.path.name if document.path is not None else document.untitled_name
+
+    def close_current_tab(self):
+        document = self._active_document()
+        if document is None or not self._confirm_document_close(document):
+            return False
+        return self._remove_document(document)
+
     def _setup_explorer(self):
         self.explorer_frame = ttk.Frame(self.workspace, padding=(6, 4))
         header = ttk.Frame(self.explorer_frame)
@@ -330,8 +472,20 @@ class MainApp:
             self.explorer_frame, textvariable=self.project_name, anchor=tk.W
         ).grid(row=1, column=0, sticky="ew", pady=(0, 4))
 
+        actions = ttk.Frame(self.explorer_frame)
+        actions.grid(row=2, column=0, sticky="ew", pady=(0, 4))
+        ttk.Button(actions, text="Nuevo", command=self.create_explorer_file).pack(
+            side=tk.LEFT, padx=(0, 2)
+        )
+        ttk.Button(actions, text="Renombrar", command=self.rename_explorer_file).pack(
+            side=tk.LEFT, padx=2
+        )
+        ttk.Button(actions, text="Eliminar", command=self.remove_explorer_file).pack(
+            side=tk.LEFT, padx=2
+        )
+
         tree_frame = ttk.Frame(self.explorer_frame)
-        tree_frame.grid(row=2, column=0, sticky="nsew")
+        tree_frame.grid(row=3, column=0, sticky="nsew")
         self.explorer = ttk.Treeview(tree_frame, show="tree", selectmode="browse")
         self.explorer.column("#0", width=240, minwidth=160, stretch=True)
         vertical = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=self.explorer.yview)
@@ -342,11 +496,20 @@ class MainApp:
         horizontal.grid(row=1, column=0, sticky="ew")
         tree_frame.rowconfigure(0, weight=1)
         tree_frame.columnconfigure(0, weight=1)
-        self.explorer_frame.rowconfigure(2, weight=1)
+        self.explorer_frame.rowconfigure(3, weight=1)
         self.explorer_frame.columnconfigure(0, weight=1)
         self.explorer.bind("<<TreeviewOpen>>", self._on_explorer_open)
         self.explorer.bind("<Double-1>", self._activate_explorer_item)
         self.explorer.bind("<Return>", self._activate_explorer_item)
+        self.explorer.bind("<Button-3>", self._show_explorer_context_menu)
+        self.explorer_menu = tk.Menu(self.explorer, tearoff=False)
+        self.explorer_menu.add_command(label="Nuevo archivo...", command=self.create_explorer_file)
+        self.explorer_menu.add_command(
+            label="Renombrar archivo...", command=self.rename_explorer_file
+        )
+        self.explorer_menu.add_command(
+            label="Eliminar archivo...", command=self.remove_explorer_file
+        )
         self.explorer.insert("", tk.END, text="Abre una carpeta para explorar", tags=("placeholder",))
 
     def open_folder(self):
@@ -389,8 +552,9 @@ class MainApp:
     @classmethod
     def project_entries(cls, folder):
         entries = []
+        ignored = {name.casefold() for name in cls.EXPLORER_IGNORED}
         for entry in Path(folder).iterdir():
-            if entry.name in cls.EXPLORER_IGNORED or cls._is_reparse_point(entry):
+            if entry.name.casefold() in ignored or cls._is_reparse_point(entry):
                 continue
             try:
                 directory = entry.is_dir()
@@ -458,6 +622,178 @@ class MainApp:
             return "break"
         self._open_editor_file(path)
         return "break"
+
+    def _show_explorer_context_menu(self, event: tk.Event):
+        item = self.explorer.identify_row(getattr(event, "y", 0))
+        if item:
+            self.explorer.selection_set(item)
+            self.explorer.focus(item)
+        try:
+            self.explorer_menu.tk_popup(
+                getattr(event, "x_root", 0), getattr(event, "y_root", 0)
+            )
+        finally:
+            self.explorer_menu.grab_release()
+        return "break"
+
+    def _selected_explorer_path(self):
+        return self.explorer_paths.get(self.explorer.focus())
+
+    @classmethod
+    def _validate_explorer_leaf_name(cls, name):
+        value = name.strip()
+        if not value or value in {".", ".."}:
+            raise ValueError("Escribe un nombre de archivo válido.")
+        if value != name or value.endswith((".", " ")):
+            raise ValueError("El nombre no puede empezar o terminar con espacios o puntos.")
+        if any(character in value for character in '<>:"/\\|?*'):
+            raise ValueError("El nombre contiene caracteres no permitidos por Windows.")
+        reserved = {"CON", "PRN", "AUX", "NUL"}
+        reserved.update(f"COM{number}" for number in range(1, 10))
+        reserved.update(f"LPT{number}" for number in range(1, 10))
+        if value.split(".", 1)[0].upper() in reserved:
+            raise ValueError("Ese nombre está reservado por Windows.")
+        if value.casefold() in {item.casefold() for item in cls.EXPLORER_IGNORED}:
+            raise ValueError("Ese nombre está reservado para datos internos del IDE.")
+        return value
+
+    def _validated_project_path(self, path):
+        if self.project_dir is None:
+            raise ValueError("Primero abre una carpeta de proyecto.")
+        raw = Path(path)
+        if self._is_reparse_point(raw):
+            raise ValueError("No se permiten enlaces ni puntos de redirección.")
+        try:
+            resolved = raw.resolve(strict=True)
+            resolved.relative_to(self.project_dir.resolve(strict=True))
+        except (OSError, ValueError) as error:
+            raise ValueError("El elemento debe estar dentro del proyecto abierto.") from error
+        return resolved
+
+    def _explorer_target_directory(self):
+        selected = self._selected_explorer_path()
+        if selected is None:
+            if self.project_dir is None:
+                raise ValueError("Primero abre una carpeta de proyecto.")
+            selected = self.project_dir
+        selected = self._validated_project_path(selected)
+        if selected.is_file():
+            selected = selected.parent
+        if not selected.is_dir():
+            raise ValueError("Selecciona una carpeta o un archivo del proyecto.")
+        return selected
+
+    def _selected_regular_file(self):
+        selected = self._selected_explorer_path()
+        if selected is None:
+            raise ValueError("Selecciona un archivo en el explorador.")
+        selected = self._validated_project_path(selected)
+        if selected == self.project_dir.resolve() or not selected.is_file():
+            raise ValueError("Esta operación solo está disponible para archivos.")
+        return selected
+
+    def create_explorer_file(self):
+        try:
+            folder = self._explorer_target_directory()
+        except ValueError as error:
+            messagebox.showwarning("Nuevo archivo", str(error), parent=self.root)
+            return False
+        name = simpledialog.askstring(
+            "Nuevo archivo", "Nombre del archivo:", initialvalue="nuevo.mini", parent=self.root
+        )
+        if name is None:
+            return False
+        try:
+            name = self._validate_explorer_leaf_name(name)
+            destination = folder / name
+            if destination.exists():
+                raise ValueError(f"Ya existe un elemento llamado {name}.")
+            destination.write_text("", encoding="utf-8")
+        except (OSError, ValueError) as error:
+            messagebox.showerror("Nuevo archivo", str(error), parent=self.root)
+            return False
+        self.refresh_explorer()
+        self._open_editor_file(destination)
+        self.status.set(f"Archivo creado: {destination}")
+        return True
+
+    def rename_explorer_file(self):
+        try:
+            source = self._selected_regular_file()
+        except ValueError as error:
+            messagebox.showwarning("Renombrar archivo", str(error), parent=self.root)
+            return False
+        name = simpledialog.askstring(
+            "Renombrar archivo", "Nuevo nombre:", initialvalue=source.name, parent=self.root
+        )
+        if name is None:
+            return False
+        try:
+            name = self._validate_explorer_leaf_name(name)
+            destination = source.with_name(name)
+            if destination == source:
+                return False
+            if destination.exists():
+                raise ValueError(f"Ya existe un elemento llamado {name}.")
+            document = self._find_document_by_path(source)
+            source.rename(destination)
+        except (OSError, ValueError) as error:
+            messagebox.showerror("Renombrar archivo", str(error), parent=self.root)
+            return False
+        if document is not None:
+            document.path = destination.resolve()
+            self._update_tab_label(document)
+            if document is self._active_document():
+                self._set_active_document(document)
+        self.refresh_explorer()
+        self.status.set(f"Archivo renombrado: {destination}")
+        return True
+
+    @staticmethod
+    def _available_trash_path(trash, source):
+        destination = trash / source.name
+        counter = 1
+        while destination.exists():
+            destination = trash / f"{source.stem}.{counter}{source.suffix}"
+            counter += 1
+        return destination
+
+    def remove_explorer_file(self):
+        try:
+            source = self._selected_regular_file()
+        except ValueError as error:
+            messagebox.showwarning("Eliminar archivo", str(error), parent=self.root)
+            return False
+        document = self._find_document_by_path(source)
+        if document is not None and document.dirty:
+            messagebox.showwarning(
+                "Eliminar archivo",
+                "Guarda o cierra la pestaña con cambios antes de eliminar el archivo.",
+                parent=self.root,
+            )
+            return False
+        if not messagebox.askyesno(
+            "Eliminar archivo",
+            f"¿Mover {source.name} a .minilang-trash?\nPodrás recuperarlo desde esa carpeta.",
+            parent=self.root,
+        ):
+            return False
+        try:
+            trash = self.project_dir.resolve() / ".minilang-trash"
+            if trash.exists() and self._is_reparse_point(trash):
+                raise OSError(".minilang-trash no puede ser un enlace.")
+            trash.mkdir(exist_ok=True)
+            trash = self._validated_project_path(trash)
+            destination = self._available_trash_path(trash, source)
+            source.rename(destination)
+        except (OSError, ValueError) as error:
+            messagebox.showerror("Eliminar archivo", str(error), parent=self.root)
+            return False
+        if document is not None:
+            self._remove_document(document)
+        self.refresh_explorer()
+        self.status.set(f"Archivo movido a: {destination}")
+        return True
 
     def toggle_explorer(self):
         self.set_explorer_visible(not self.explorer_visible)
@@ -659,12 +995,9 @@ class MainApp:
         return self.input_values.pop(0)
 
     def new_file(self):
-        if not self._confirm_discard():
-            return
-        self.current_file = None
-        self.editor.set("")
-        self.dirty = False
-        self.update_title()
+        self._create_editor_tab("")
+        self.status.set("Nueva pestaña creada")
+        return True
 
     def open_file(self):
         path = filedialog.askopenfilename(
@@ -676,6 +1009,11 @@ class MainApp:
 
     def _open_editor_file(self, path):
         path = Path(path).resolve()
+        existing = self._find_document_by_path(path)
+        if existing is not None:
+            self._select_document(existing)
+            self.status.set(f"Archivo ya abierto: {path}")
+            return True
         try:
             source = path.read_text(encoding="utf-8")
         except UnicodeError:
@@ -686,12 +1024,7 @@ class MainApp:
         except OSError as error:
             messagebox.showerror("Abrir", str(error), parent=self.root)
             return False
-        if not self._confirm_discard():
-            return False
-        self.editor.set(source)
-        self.current_file = path
-        self.dirty = False
-        self.update_title()
+        self._create_editor_tab(source, path=path)
         if self.project_dir is None:
             self.set_project_folder(path.parent)
         self.status.set(f"Archivo abierto: {path}")
@@ -702,8 +1035,10 @@ class MainApp:
             return self.save_as()
         try:
             self.current_file.write_text(self.editor.get(), encoding="utf-8")
-            self.dirty = False
-            self.update_title()
+            self._sync_active_document(dirty=False)
+            if self._path_in_project(self.current_file):
+                self.refresh_explorer()
+            self.status.set(f"Archivo guardado: {self.current_file}")
             return True
         except OSError as error:
             messagebox.showerror("Guardar", str(error), parent=self.root)
@@ -716,14 +1051,26 @@ class MainApp:
         )
         if not path:
             return False
-        self.current_file = Path(path)
-        saved = self.save_file()
-        if saved:
-            if self.project_dir is None:
-                self.set_project_folder(self.current_file.parent)
-            elif self._path_in_project(self.current_file):
-                self.refresh_explorer()
-        return saved
+        destination = Path(path).resolve()
+        existing = self._find_document_by_path(destination)
+        active = self._active_document()
+        if existing is not None and existing is not active:
+            messagebox.showerror(
+                "Guardar como", "Ese archivo ya está abierto en otra pestaña.", parent=self.root
+            )
+            return False
+        try:
+            destination.write_text(self.editor.get(), encoding="utf-8")
+        except OSError as error:
+            messagebox.showerror("Guardar", str(error), parent=self.root)
+            return False
+        self._sync_active_document(path=destination, dirty=False)
+        if self.project_dir is None:
+            self.set_project_folder(destination.parent)
+        elif self._path_in_project(destination):
+            self.refresh_explorer()
+        self.status.set(f"Archivo guardado: {destination}")
+        return True
 
     def _path_in_project(self, path):
         if self.project_dir is None:
@@ -766,14 +1113,26 @@ class MainApp:
         self.editor.set_font_size(self.editor.font_size - 1)
 
     def mark_dirty(self):
-        self.dirty = True
-        self.update_title()
+        document = self._active_document()
+        if document is None:
+            self.dirty = True
+            self.update_title()
+            return
+        document.dirty = True
+        self._update_tab_label(document)
+        self._set_active_document(document)
 
     def update_cursor(self, line, column):
         self.status.set(f"Línea {line}, columna {column}")
 
     def update_title(self):
-        name = self.current_file.name if self.current_file else "Sin título"
+        document = None
+        if getattr(self, "editor_notebook", None) is not None:
+            document = self._active_document()
+        name = (
+            self._document_name(document) if document is not None
+            else self.current_file.name if self.current_file else "Sin título"
+        )
         marker = "*" if self.dirty else ""
         self.root.title(
             f"{marker}{name} — Mini-Lang v{APP_VERSION} — "
@@ -781,18 +1140,16 @@ class MainApp:
         )
 
     def _confirm_discard(self):
-        if not self.dirty:
-            return True
-        answer = messagebox.askyesnocancel("Cambios", "¿Guardar los cambios?", parent=self.root)
-        if answer is None:
-            return False
-        if answer:
-            return self.save_file()
-        return True
+        document = self._active_document()
+        return True if document is None else self._confirm_document_close(document)
 
     def close(self):
-        if self._confirm_discard():
-            self.root.destroy()
+        documents = list(self.editor_tabs.values())
+        for document in documents:
+            if not self._confirm_document_close(document):
+                return False
+        self.root.destroy()
+        return True
 
 
 def run_self_test():

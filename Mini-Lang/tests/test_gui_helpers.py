@@ -27,7 +27,8 @@ class GuiHelpersTests(unittest.TestCase):
         for command in (
             "open_file", "save_file", "run_code", "build_code", "compile_assembly",
             "compile_javascript", "compile_web_game", "open_folder", "toggle_explorer",
-            "start_debug", "find_text", "show_compiling",
+            "start_debug", "find_text", "show_compiling", "close_current_tab",
+            "create_explorer_file", "rename_explorer_file", "remove_explorer_file",
         ):
             self.assertTrue(callable(getattr(app.MainApp, command)))
 
@@ -73,6 +74,8 @@ class GuiHelpersTests(unittest.TestCase):
             "Archivo", "Compilar", "Editar", "Ver",
         ])
         self.assertIn("Abrir carpeta...", [item["label"] for item in menus[1].commands])
+        close_tab = next(item for item in menus[1].commands if item["label"] == "Cerrar pestaña")
+        self.assertEqual(close_tab["accelerator"], "Ctrl+W")
         self.assertEqual([item["label"] for item in menus[2].commands], [
             "Compilar", "Compilar a pseudoensamblador...", "Compilar a JavaScript...",
             "Compilar juego web (.html)...",
@@ -81,6 +84,7 @@ class GuiHelpersTests(unittest.TestCase):
         bindings = {call.args[0]: call.args[1] for call in fake.root.bind.call_args_list}
         self.assertIn("<F5>", bindings)
         self.assertIn("<F7>", bindings)
+        self.assertIn("<Control-w>", bindings)
         fake.run_code = Mock()
         fake.build_code = Mock()
         fake.compile_assembly = Mock()

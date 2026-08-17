@@ -101,10 +101,20 @@ Usa `Archivo > Abrir carpeta...` para seleccionar un proyecto. El árbol aparece
 
 Las carpetas se cargan al expandirlas. `Ver > Mostrar/Ocultar explorador` permite recuperar el espacio del editor sin cerrar el proyecto.
 
+Los botones `Nuevo`, `Renombrar` y `Eliminar`, también disponibles con clic derecho, operan solamente sobre archivos del proyecto. `Eliminar` es recuperable: mueve el archivo a la carpeta oculta `.minilang-trash` y nunca sobrescribe lo que ya exista allí. Las carpetas, rutas externas y enlaces del sistema no se modifican.
+
+## Pestañas de edición
+
+Cada archivo se abre en su propia pestaña y conserva por separado el contenido, la ruta y el indicador `*` de cambios pendientes. Volver a abrir la misma ruta selecciona la pestaña existente. Todas las acciones de ejecución, compilación, exportación, búsqueda y depuración trabajan sobre la pestaña activa.
+
+Cerrar una pestaña o salir del IDE solicita confirmación por cada documento modificado. No se puede retirar desde el explorador un archivo abierto que todavía tenga cambios sin guardar.
+
 ## Atajos principales
 
 - `F5`: compila y ejecuta el programa con los valores de la pestaña `Entrada`.
 - `F7`: compila sin ejecutar, actualiza los paneles y muestra el pseudoensamblador.
+- `Ctrl+N`: crea una pestaña vacía.
+- `Ctrl+W`: cierra la pestaña activa.
 
 F7 no guarda un archivo. Para exportar se mantienen las opciones `Compilar a pseudoensamblador...` y `Compilar a JavaScript...`.
 
@@ -121,6 +131,7 @@ F7 y todas las opciones del menú `Compilar` muestran primero una ventana modal 
 - [Plan 8 — Atajos de compilación y ejecución](docs/PLAN8.md)
 - [Plan 9 — Juegos web con Canvas](docs/PLAN9.md)
 - [Plan 10 — Espera visual de compilación](docs/PLAN10.md)
+- [Plan 11 — Pestañas y operaciones de archivos](docs/PLAN11.md)
 - [Seguimiento general del proyecto](docs/SEGUIMIENTO.md)
 - [Gramática](docs/GRAMMAR.md)
 - [Bytecode](docs/BYTECODE.md)
