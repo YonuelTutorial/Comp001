@@ -108,6 +108,8 @@ Las carpetas se cargan al expandirlas. `Ver > Mostrar/Ocultar explorador` permit
 
 F7 no guarda un archivo. Para exportar se mantienen las opciones `Compilar a pseudoensamblador...` y `Compilar a JavaScript...`.
 
+F7 y todas las opciones del menú `Compilar` muestran primero una ventana modal con `Compilando...`. La espera interna es breve y configurable, pero el número y la duración no aparecen en pantalla. La barra continúa animada y el IDE no se congela.
+
 ## Documentación
 
 - [Plan](docs/PLAN.md)
@@ -118,6 +120,7 @@ F7 no guarda un archivo. Para exportar se mantienen las opciones `Compilar a pse
 - [Plan 7 — Explorador de proyecto](docs/PLAN7.md)
 - [Plan 8 — Atajos de compilación y ejecución](docs/PLAN8.md)
 - [Plan 9 — Juegos web con Canvas](docs/PLAN9.md)
+- [Plan 10 — Espera visual de compilación](docs/PLAN10.md)
 - [Seguimiento general del proyecto](docs/SEGUIMIENTO.md)
 - [Gramática](docs/GRAMMAR.md)
 - [Bytecode](docs/BYTECODE.md)

@@ -1,3 +1,6 @@
+#INF-920-001 COMPILADORES
+#Yonuel Peña 2190790
+
 import json
 import re
 import stat
@@ -9,29 +12,13 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 from minilang import *
 
 
-DEMO_SOURCE = """// BURBUJA
-int lista[5];
-lista[0] = 8;
-lista[1] = 3;
-lista[2] = 5;
-lista[3] = 1;
-lista[4] = 9;
+APP_VERSION = "4.5"
+APP_AUTHOR = "Yonuel Peña"
+APP_STUDENT_ID = "2190790"
+APP_DATE = "17/08/2026"
 
-for (int i = 0; i < 5; i++) {
-    for (int j = 0; j < 4 - i; j++) {
-        if (lista[j] > lista[j + 1]) {
-            int temp = lista[j];
-            lista[j] = lista[j + 1];
-            lista[j + 1] = temp;
-        }
-    }
-}
 
-print("Lista ordenada:");
-for (int i = 0; i < 5; i++) {
-    print(lista[i]);
-}
-"""
+DEMO_SOURCE = """"""
 
 
 class CodeEditor(ttk.Frame):
@@ -141,6 +128,7 @@ class CodeEditor(ttk.Frame):
 
 
 class MainApp:
+    COMPILATION_WAIT_MS = 1_000
     EXPLORER_IGNORED = frozenset({".git", "__pycache__", ".pytest_cache"})
     PANEL_NAMES = (
         "Salida", "Errores", "Tokens", "AST", "Símbolos", "Pseudoensamblador",
@@ -155,6 +143,7 @@ class MainApp:
         self.input_values = []
         self.last_result = None
         self.debugger = None
+        self.compilation_dialog = None
         self.status = tk.StringVar(value="Línea 1, columna 1")
         self.project_name = tk.StringVar(value="Sin carpeta abierta")
         self.explorer_paths = {}
@@ -176,7 +165,7 @@ class MainApp:
         toolbar.pack(fill=tk.X)
         for text, command in (
             ("Ejecutar F5", self.run_code),
-            ("Compilar F7", self.build_code),
+            ("Compilar F7", lambda: self.show_compiling(self.build_code)),
             ("Depurar", self.start_debug),
             ("Paso", self.debug_step),
             ("Continuar", self.debug_continue),
@@ -221,16 +210,22 @@ class MainApp:
         menu.add_cascade(label="Archivo", menu=file_menu)
 
         compile_menu = tk.Menu(menu, tearoff=False)
-        compile_menu.add_command(label="Compilar", accelerator="F7", command=self.build_code)
+        compile_menu.add_command(
+            label="Compilar", accelerator="F7",
+            command=lambda: self.show_compiling(self.build_code),
+        )
         compile_menu.add_separator()
         compile_menu.add_command(
-            label="Compilar a pseudoensamblador...", command=self.compile_assembly
+            label="Compilar a pseudoensamblador...",
+            command=lambda: self.show_compiling(self.compile_assembly),
         )
         compile_menu.add_command(
-            label="Compilar a JavaScript...", command=self.compile_javascript
+            label="Compilar a JavaScript...",
+            command=lambda: self.show_compiling(self.compile_javascript),
         )
         compile_menu.add_command(
-            label="Compilar juego web (.html)...", command=self.compile_web_game
+            label="Compilar juego web (.html)...",
+            command=lambda: self.show_compiling(self.compile_web_game),
         )
         menu.add_cascade(label="Compilar", menu=compile_menu)
 
@@ -255,7 +250,61 @@ class MainApp:
         self.root.bind("<Control-plus>", lambda event: self.increase_font())
         self.root.bind("<Control-minus>", lambda event: self.decrease_font())
         self.root.bind("<F5>", lambda event: self.run_code())
-        self.root.bind("<F7>", lambda event: self.build_code())
+        self.root.bind("<F7>", lambda event: self.show_compiling(self.build_code))
+
+    def show_compiling(self, action):
+        active = self.compilation_dialog
+        if active is not None:
+            try:
+                if active.winfo_exists():
+                    active.lift()
+                    active.focus_force()
+                    return False
+            except tk.TclError:
+                pass
+            self.compilation_dialog = None
+
+        dialog = tk.Toplevel(self.root)
+        self.compilation_dialog = dialog
+        dialog.title("Compilando")
+        dialog.geometry("320x105")
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+        dialog.protocol("WM_DELETE_WINDOW", lambda: None)
+
+        content = ttk.Frame(dialog, padding=18)
+        content.pack(fill=tk.BOTH, expand=True)
+        ttk.Label(
+            content, text="Compilando...", font=("Segoe UI", 12, "bold")
+        ).pack(pady=(0, 14))
+        progress = ttk.Progressbar(content, mode="indeterminate", length=270)
+        progress.pack(fill=tk.X)
+        progress.start(12)
+
+        dialog.grab_set()
+        dialog.focus_set()
+        self.root.after(
+            self.COMPILATION_WAIT_MS,
+            lambda: self._finish_compiling(dialog, progress, action),
+        )
+        return True
+
+    def _finish_compiling(self, dialog, progress, action):
+        if self.compilation_dialog is not dialog:
+            return
+        try:
+            progress.stop()
+            if dialog.winfo_exists():
+                dialog.grab_release()
+                dialog.destroy()
+        except tk.TclError:
+            pass
+        finally:
+            self.compilation_dialog = None
+        try:
+            self.root.after_idle(action)
+        except tk.TclError:
+            return
 
     @staticmethod
     def _text_area(parent):
@@ -391,9 +440,10 @@ class MainApp:
         if item:
             self.root.after_idle(lambda selected=item: self._load_explorer_node(selected))
 
-    def _activate_explorer_item(self, event=None):
-        mouse_event = event is not None and getattr(event, "num", None) == 1
-        item = self.explorer.identify_row(event.y) if mouse_event else ""
+    def _activate_explorer_item(self, event: tk.Event | None = None):
+        item = ""
+        if event is not None and getattr(event, "num", None) == 1:
+            item = self.explorer.identify_row(event.y)
         item = item or self.explorer.focus()
         path = self.explorer_paths.get(item)
         if path is None:
@@ -725,7 +775,10 @@ class MainApp:
     def update_title(self):
         name = self.current_file.name if self.current_file else "Sin título"
         marker = "*" if self.dirty else ""
-        self.root.title(f"{marker}{name} — Mini-Lang v4.4")
+        self.root.title(
+            f"{marker}{name} — Mini-Lang v{APP_VERSION} — "
+            f"{APP_AUTHOR} — {APP_STUDENT_ID} — {APP_DATE}"
+        )
 
     def _confirm_discard(self):
         if not self.dirty:

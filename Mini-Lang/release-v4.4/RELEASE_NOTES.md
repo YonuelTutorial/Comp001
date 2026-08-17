@@ -15,7 +15,7 @@ Build para Windows generada el 2026-08-12.
 
 ## Verificación
 
-- Commit base de la fuente: `bc6c278`; PLAN9 corresponde a cambios locales posteriores.
+- Commit base de la fuente: `bc6c278`;
 - Python: 3.12.10.
 - PyInstaller: 6.14.2.
 - Suite: 141 pruebas aprobadas.
@@ -32,7 +32,3 @@ Build para Windows generada el 2026-08-12.
 4. Guarda el archivo y ábrelo con doble clic en un navegador moderno.
 
 F5 continúa ejecutando la máquina virtual y no ofrece gráficos. Para ejecutar llamadas `game*`, utiliza la exportación de juego web.
-
-## Distribuciones
-
-Esta versión está separada de `release-v4.3`, que se conserva intacta como respaldo. El EXE no está firmado digitalmente y Windows puede mostrar una advertencia.

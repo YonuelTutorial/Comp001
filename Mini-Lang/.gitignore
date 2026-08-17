@@ -11,6 +11,7 @@ docs/*
 !docs/PLAN7.md
 !docs/PLAN8.md
 !docs/PLAN9.md
+!docs/PLAN10.md
 !docs/SEGUIMIENTO.md
 dist/
 tmp_*.py

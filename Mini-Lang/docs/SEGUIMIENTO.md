@@ -2,7 +2,7 @@
 
 Última actualización: **2026-08-12**  
 Zona horaria: **America/Santo_Domingo**  
-Versión visible del IDE fuente: **v4.4**
+Versión visible del IDE fuente: **v4.5**
 Rama verificada: **main**  
 Commit base verificado: **`bc6c278` — Bump app window title to v4.3**; PLAN9 permanece como cambio local
 
@@ -31,13 +31,13 @@ AST optimizado + contrato de juego
 
 El proyecto no es solamente un intérprete. Incluye análisis estático, una representación intermedia propia, una máquina virtual, un intérprete del AST usado como referencia, optimizaciones, depuración, módulos, generación de JavaScript, exportación de artefactos y una interfaz de estilo IDE.
 
-El estado actual es funcional y estable para el alcance educativo definido. PLAN9 añadió juegos web con Canvas. La verificación más reciente produjo **141 pruebas aprobadas**, autoprueba correcta, sintaxis Python válida y un fotograma ejecutado con un entorno de navegador simulado en Node.js.
+El estado actual es funcional para el alcance educativo definido. PLAN9 añadió juegos web con Canvas y PLAN10 añadió la espera visual de compilación. La prueba histórica del ejemplo de burbuja se actualizó para reflejar que el IDE inicia actualmente con el editor vacío. La fuente y la build v4.5 aprobaron una validación limpia de 144 pruebas y la autoprueba del EXE.
 
 ## 2. Estado verificado
 
 | Elemento | Estado actual |
 |---|---|
-| IDE fuente | Tkinter, versión visible v4.4 |
+| IDE fuente | Tkinter, título visible v4.5 con autor, matrícula y fecha |
 | Compilación interna | Funcional con F7 |
 | Ejecución en VM | Funcional con F5 |
 | Pseudoensamblador | Generado, mostrado y exportable |
@@ -45,11 +45,11 @@ El estado actual es funcional y estable para el alcance educativo definido. PLAN
 | Juegos web | HTML autocontenido, Canvas, teclado y ciclo por fotogramas |
 | Explorador de proyecto | Funcional, lateral derecho y carga incremental |
 | Depurador | Pasos, continuación y puntos de interrupción |
-| Pruebas | 141 aprobadas el 2026-08-12 |
+| Pruebas | 144 aprobadas el 2026-08-17 |
 | Autoprueba | Aprobada con `python app.py --self-test` |
 | Validación de sintaxis | Aprobada con `compileall` |
 | Node.js verificado | v24.19.0 |
-| Ejecutable distribuible actual | `release-v4.4`, con PLAN9; `release-v4.3` se conserva como respaldo |
+| Ejecutable distribuible actual | `release-v4.5`, con PLAN10 y título personalizado; versiones anteriores se conservan |
 | Estado Git | Hay documentación y artefactos locales pendientes de integrar |
 
 Comandos usados para confirmar el estado:
@@ -316,6 +316,9 @@ python app.py
 - No pide datos de entrada.
 - No guarda archivos.
 - Actualiza todos los paneles y selecciona `Pseudoensamblador`.
+- Antes de compilar, muestra una ventana modal `Compilando...` durante `COMPILATION_WAIT_MS`, actualmente 1000 ms.
+- La duración no se muestra en la ventana y la barra permanece animada sin bloquear Tkinter.
+- Las exportaciones a pseudoensamblador, JavaScript y juego web utilizan la misma espera.
 
 ### 7.4 Exportar pseudoensamblador
 
@@ -407,6 +410,7 @@ Los breakpoints no se colocan todavía haciendo clic en el margen del editor.
 | PLAN8 | F5 para ejecutar y F7 para compilar sin ejecutar |
 | v4.3 | Integración en Git del explorador, exportación, pruebas y actualización de versión |
 | PLAN9 / fuente v4.4 | API de juegos, runtime Canvas y exportación HTML autocontenida |
+| PLAN10 / fuente v4.5 | Ventana modal de compilación con espera interna configurable y no bloqueante |
 
 ### Decisión descartada
 
@@ -422,14 +426,14 @@ La suite actual utiliza `unittest` y no requiere instalar un framework de prueba
 |---|---:|---|
 | `test_language_matrix.py` | 50 | Matriz de operadores y construcciones |
 | `test_minilang.py` | 26 | Lexer, parser, semántica, VM y ejemplos originales |
-| `test_gui_helpers.py` | 14 | GUI, exportaciones, F5/F7, JavaScript y juego HTML |
+| `test_gui_helpers.py` | 17 | GUI, exportaciones, F5/F7, juego HTML, espera y título |
 | `test_plan2_features.py` | 12 | Builtins, módulos, optimización y depuración |
 | `test_javascript_codegen.py` | 11 | Estructura y paridad del backend JavaScript |
 | `test_numeric_semantics.py` | 9 | Promociones y casos numéricos |
 | `test_file_explorer.py` | 8 | Árbol, rutas y apertura segura |
 | `test_advanced_examples.py` | 1 | Programa avanzado completo |
 | `test_web_game.py` | 10 | Contrato, Canvas, HTML, VM, fotograma y límites |
-| **Total** | **141** | **Suite completa aprobada** |
+| **Total** | **144** | Suite completa aprobada; el inicio vacío está cubierto |
 
 Las pruebas de JavaScript usan Node.js cuando está disponible y comparan la salida con la VM. También cubren enteros grandes, módulos, entradas, errores y límites de ejecución. PLAN9 simula las primitivas necesarias del navegador para ejecutar un fotograma y comprobar operaciones reales de dibujo sin depender de una interfaz gráfica durante la suite.
 
@@ -477,6 +481,8 @@ Estas limitaciones no son fallos de las pruebas; son fronteras del diseño actua
 - `MiniLang.spec` conserva la receta histórica de PyInstaller.
 - La build final autorizada de v4.3 está en `release-v4.3`.
 - La build autorizada con PLAN9 está en `release-v4.4`; no sustituyó ni eliminó v4.3.
+- La build autorizada con PLAN10 y el título personalizado está en `release-v4.5`; se generó en una ruta nueva.
+- `release-v4.4` no incluye PLAN10 ni el título personalizado.
 - `MiniLang.exe` fue generado con Python 3.12.10 y PyInstaller 6.14.2.
 - La autoprueba del EXE terminó con código de salida 0.
 - El release incluye `MiniLang.exe`, `MiniLang-v4.3.zip`, `RELEASE_NOTES.md` y `SHA256SUMS.txt`.
@@ -599,6 +605,7 @@ El README enlaza documentos que están presentes localmente pero ignorados por G
 - `docs/PLAN7.md`
 - `docs/PLAN8.md`
 - `docs/PLAN9.md`
+- `docs/PLAN10.md`
 
 No existe actualmente `PLAN3.md`. La numeración salta de PLAN2 a PLAN4 debido a la evolución histórica de las tareas.
 
@@ -608,7 +615,7 @@ Antes de empezar una nueva fase:
 
 - [ ] Leer este documento y el plan más reciente.
 - [ ] Revisar `git status` para proteger cambios locales.
-- [ ] Ejecutar las 141 pruebas.
+- [ ] Ejecutar las 144 pruebas.
 - [ ] Ejecutar `python app.py --self-test`.
 - [ ] Confirmar si Node.js está disponible cuando se toque el backend JavaScript.
 - [ ] Crear un PLAN nuevo si la ampliación requiere varias fases.
@@ -626,6 +633,6 @@ Antes de entregar una fase:
 
 ## 19. Conclusión
 
-La fuente de Mini-Lang v4.4 ya cumple bien su propósito como lenguaje educativo y laboratorio de compiladores. Tiene un frontend completo, semántica estática, optimización, VM, JavaScript, un destino de juego web, ejecución segura, depuración, módulos, pruebas amplias y una interfaz cercana a un IDE pequeño.
+La fuente de Mini-Lang v4.5 ya cumple bien su propósito como lenguaje educativo y laboratorio de compiladores. Tiene un frontend completo, semántica estática, optimización, VM, JavaScript, un destino de juego web, ejecución segura, depuración, módulos, pruebas amplias y una interfaz cercana a un IDE pequeño.
 
 No hay una corrección funcional crítica conocida pendiente dentro del alcance actual. El trabajo inmediato más importante es probar visualmente `examples/cuadrado.mini` en el navegador elegido, cerrar la documentación y el estado de Git y decidir cuándo generar una distribución posterior a v4.3. Las ampliaciones siguientes pueden concentrarse en Pong, más primitivas gráficas, experiencia de IDE o automatización de calidad.

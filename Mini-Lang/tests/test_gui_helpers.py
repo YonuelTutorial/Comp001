@@ -4,16 +4,17 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 import app
 from minilang import Compiler
 
 
 class GuiHelpersTests(unittest.TestCase):
-    def test_demo_compiles(self):
+    def test_empty_initial_source_compiles(self):
+        self.assertEqual(app.DEMO_SOURCE.strip(), "")
         result = Compiler(max_steps=1_000_000).compile_and_run(app.DEMO_SOURCE)
-        self.assertEqual(result.output, "Lista ordenada:\n1\n3\n5\n8\n9")
+        self.assertEqual(result.output, "")
 
     def test_self_test(self):
         self.assertEqual(app.run_self_test(), 0)
@@ -26,12 +27,24 @@ class GuiHelpersTests(unittest.TestCase):
         for command in (
             "open_file", "save_file", "run_code", "build_code", "compile_assembly",
             "compile_javascript", "compile_web_game", "open_folder", "toggle_explorer",
-            "start_debug", "find_text",
+            "start_debug", "find_text", "show_compiling",
         ):
             self.assertTrue(callable(getattr(app.MainApp, command)))
 
     def test_javascript_panel_is_configured(self):
         self.assertIn("JavaScript", app.MainApp.PANEL_NAMES)
+
+    def test_title_includes_version_and_author_data(self):
+        fake = object.__new__(app.MainApp)
+        fake.root = Mock()
+        fake.current_file = None
+        fake.dirty = False
+
+        fake.update_title()
+
+        fake.root.title.assert_called_once_with(
+            "Sin título — Mini-Lang v4.5 — Yonuel Peña — 2190790 — 17/08/2026"
+        )
 
     def test_compile_menu_contains_all_targets(self):
         menus = []
@@ -53,6 +66,7 @@ class GuiHelpersTests(unittest.TestCase):
 
         fake = object.__new__(app.MainApp)
         fake.root = Mock()
+        fake.show_compiling = Mock()
         with patch("app.tk.Menu", FakeMenu):
             fake._menu()
         self.assertEqual([item["label"] for item in menus[0].cascades], [
@@ -69,10 +83,69 @@ class GuiHelpersTests(unittest.TestCase):
         self.assertIn("<F7>", bindings)
         fake.run_code = Mock()
         fake.build_code = Mock()
+        fake.compile_assembly = Mock()
+        fake.compile_javascript = Mock()
+        fake.compile_web_game = Mock()
         bindings["<F5>"](None)
         bindings["<F7>"](None)
         fake.run_code.assert_called_once_with()
-        fake.build_code.assert_called_once_with()
+        fake.build_code.assert_not_called()
+        fake.show_compiling.assert_called_once_with(fake.build_code)
+
+        fake.show_compiling.reset_mock()
+        for item in menus[2].commands:
+            item["command"]()
+        self.assertEqual(fake.show_compiling.call_args_list, [
+            call(fake.build_code),
+            call(fake.compile_assembly),
+            call(fake.compile_javascript),
+            call(fake.compile_web_game),
+        ])
+
+    def test_compiling_dialog_uses_configured_delay_without_showing_the_number(self):
+        fake = object.__new__(app.MainApp)
+        fake.root = Mock()
+        fake.compilation_dialog = None
+        action = Mock()
+        dialog = Mock()
+        dialog.winfo_exists.return_value = True
+        content = Mock()
+        label = Mock()
+        progress = Mock()
+
+        with (
+            patch("app.tk.Toplevel", return_value=dialog),
+            patch("app.ttk.Frame", return_value=content),
+            patch("app.ttk.Label", return_value=label) as label_factory,
+            patch("app.ttk.Progressbar", return_value=progress),
+        ):
+            self.assertTrue(fake.show_compiling(action))
+
+        self.assertEqual(label_factory.call_args.kwargs["text"], "Compilando...")
+        self.assertNotIn("3", label_factory.call_args.kwargs["text"])
+        progress.start.assert_called_once_with(12)
+        delay, finish = fake.root.after.call_args.args
+        self.assertEqual(delay, app.MainApp.COMPILATION_WAIT_MS)
+        action.assert_not_called()
+
+        finish()
+        progress.stop.assert_called_once_with()
+        dialog.grab_release.assert_called_once_with()
+        dialog.destroy.assert_called_once_with()
+        fake.root.after_idle.assert_called_once_with(action)
+
+    def test_compiling_dialog_does_not_open_twice(self):
+        fake = object.__new__(app.MainApp)
+        fake.root = Mock()
+        fake.compilation_dialog = Mock()
+        fake.compilation_dialog.winfo_exists.return_value = True
+
+        with patch("app.tk.Toplevel") as toplevel:
+            self.assertFalse(fake.show_compiling(Mock()))
+
+        toplevel.assert_not_called()
+        fake.compilation_dialog.lift.assert_called_once_with()
+        fake.compilation_dialog.focus_force.assert_called_once_with()
 
     @staticmethod
     def _fake_app(source, current_file=None):
