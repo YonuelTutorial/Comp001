@@ -44,7 +44,7 @@ class GuiHelpersTests(unittest.TestCase):
         fake.update_title()
 
         fake.root.title.assert_called_once_with(
-            "Sin título — Mini-Lang v4.5 — Yonuel Peña — 2190790 — 17/08/2026"
+            "Sin título — Mini-Lang v4.6 — Yonuel Peña — 2190790 — 17/08/2026"
         )
 
     def test_compile_menu_contains_all_targets(self):

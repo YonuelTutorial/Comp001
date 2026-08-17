@@ -13,7 +13,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 from minilang import *
 
 
-APP_VERSION = "4.5"
+APP_VERSION = "4.6"
 APP_AUTHOR = "Yonuel Peña"
 APP_STUDENT_ID = "2190790"
 APP_DATE = "17/08/2026"
